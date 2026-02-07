@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 籟柏太極易占 LINE Bot
-Version: 1.0.0
+Version: 1.1.0 - 加入搖卦儀式
 """
 
 import os
@@ -15,7 +15,7 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi,
-    ReplyMessageRequest, TextMessage,
+    ReplyMessageRequest, TextMessage, ImageMessage,
     QuickReply, QuickReplyItem, PostbackAction
 )
 from linebot.v3.webhooks import (
@@ -41,6 +41,9 @@ handler = WebhookHandler(CHANNEL_SECRET)
 
 DB_PATH = 'yizhan.db'
 user_states = {}
+
+# 太極圖片網址
+TAIJI_IMAGE_URL = 'https://hml1980.github.io/laibai-linebot/images/taiji_ritual.png'
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -120,6 +123,51 @@ def generate_hexagram():
     upper = random.choice(trigram_names)
     lower = random.choice(trigram_names)
     return get_hexagram(upper, lower)
+
+def generate_yao_sequence(hexagram):
+    """生成六爻序列，用於搖卦儀式顯示"""
+    lower_info = hexagram['lower_info']
+    upper_info = hexagram['upper_info']
+    
+    # 根據卦象決定爻的陰陽（簡化版：用卦的二進制表示）
+    trigram_yao = {
+        '乾': ['⚊', '⚊', '⚊'],  # 陽陽陽
+        '兌': ['⚋', '⚊', '⚊'],  # 陰陽陽
+        '離': ['⚊', '⚋', '⚊'],  # 陽陰陽
+        '震': ['⚋', '⚋', '⚊'],  # 陰陰陽
+        '巽': ['⚊', '⚊', '⚋'],  # 陽陽陰
+        '坎': ['⚋', '⚊', '⚋'],  # 陰陽陰
+        '艮': ['⚊', '⚋', '⚋'],  # 陽陰陰
+        '坤': ['⚋', '⚋', '⚋'],  # 陰陰陰
+    }
+    
+    lower_yao = trigram_yao.get(hexagram['lower'], ['⚊', '⚊', '⚊'])
+    upper_yao = trigram_yao.get(hexagram['upper'], ['⚊', '⚊', '⚊'])
+    
+    return lower_yao + upper_yao
+
+def format_ritual_process(hexagram):
+    """格式化搖卦儀式過程"""
+    yao = generate_yao_sequence(hexagram)
+    lower_info = hexagram['lower_info']
+    upper_info = hexagram['upper_info']
+    
+    ritual_text = f"""☯️ 搖卦中...
+
+初爻 {yao[0]}　二爻 {yao[1]}　三爻 {yao[2]}
+▸ 下卦成形：{lower_info['symbol']} {hexagram['lower']}（{lower_info['nature']}）
+
+四爻 {yao[3]}　五爻 {yao[4]}　上爻 {yao[5]}
+▸ 上卦成形：{upper_info['symbol']} {hexagram['upper']}（{upper_info['nature']}）
+
+═══════════════════════════════
+
+✨ 卦象已成！
+
+{hexagram['symbol']} {hexagram['name']}
+【{hexagram['fortune']}】"""
+    
+    return ritual_text
 
 def build_category_quick_reply():
     items = [QuickReplyItem(action=PostbackAction(label=f"{info['emoji']} {info['name']}", data=f"category:{code}")) for code, info in CATEGORIES.items()]
@@ -293,14 +341,34 @@ def handle_postback(event):
             increment_daily_usage(user_id)
             user_states.pop(user_id, None)
 
-            api.reply_message(ReplyMessageRequest(reply_token=event.reply_token,
-                messages=[TextMessage(text=f"""{interpretation}
+            # 搖卦儀式：三段訊息
+            # 1. 太極圖 + 靜心提示
+            ritual_image = ImageMessage(
+                original_content_url=TAIJI_IMAGE_URL,
+                preview_image_url=TAIJI_IMAGE_URL
+            )
+            
+            # 2. 搖卦過程
+            ritual_process = format_ritual_process(hexagram)
+            
+            # 3. 解讀結果
+            result_text = f"""{interpretation}
 
 ───────────────────
 
 {shichen_tip}
 
-{format_crystal_basic(crystal)}""")]))
+{format_crystal_basic(crystal)}"""
+
+            api.reply_message(ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[
+                    ritual_image,
+                    TextMessage(text="🙏 請閉眼靜心，默念您的問題三次...\n\n準備好後，卦象即將揭曉..."),
+                    TextMessage(text=ritual_process),
+                    TextMessage(text=result_text)
+                ]
+            ))
 
 @app.route('/health', methods=['GET'])
 def health_check():
