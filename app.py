@@ -5,6 +5,9 @@ Version: 1.0.0
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import random
 import sqlite3
 from datetime import datetime
