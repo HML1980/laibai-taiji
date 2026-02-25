@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-籟柏太極易占 LINE Bot - 加強版 v5.6
+籟柏太極易占 LINE Bot v5.9
 功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧
 
 Author: SAROW / 籟柏
