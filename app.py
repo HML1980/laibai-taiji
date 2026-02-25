@@ -2912,8 +2912,8 @@ def create_wisdom_flex(wisdom):
                     "type": "box",
                     "layout": "horizontal",
                     "contents": [
-                        {"type": "button", "action": {"type": "message", "label": "🔄 再抽一句", "text": "易經智慧"}, "style": "primary", "color": "#1a1a2e", "flex": 1},
-                        {"type": "button", "action": {"type": "message", "label": "🏠 回首頁", "text": "首頁"}, "style": "secondary", "flex": 1, "margin": "md"}
+                        {"type": "button", "action": {"type": "message", "label": "🔄 再抽", "text": "易經智慧"}, "style": "primary", "color": "#1a1a2e", "flex": 1},
+                        {"type": "button", "action": {"type": "message", "label": "🏠 首頁", "text": "首頁"}, "style": "secondary", "flex": 1, "margin": "md"}
                     ]
                 }
             ]
