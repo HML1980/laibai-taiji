@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """
 籟柏太極易占 LINE Bot - 加強版 v5.6
-功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦
+功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧
 
 Author: SAROW / 籟柏
 License: MIT
-Version: 5.8
+Version: 5.9
 """
 
 import os
@@ -158,6 +158,154 @@ BAGUA = {
     7: {'name': '艮', 'nature': '山', 'element': '土'},
     8: {'name': '坤', 'nature': '地', 'element': '土'},
 }
+
+# ============================================================
+# 易經智慧 - 經典語錄
+# ============================================================
+YIJING_WISDOM = [
+    # 乾卦
+    {"hexagram": "乾", "text": "天行健，君子以自強不息。", "meaning": "天道運行剛健，君子應效法天道，自強不息。"},
+    {"hexagram": "乾", "text": "潛龍勿用。", "meaning": "時機未到，宜蓄積力量，等待機會。"},
+    {"hexagram": "乾", "text": "見龍在田，利見大人。", "meaning": "嶄露頭角之時，適合結交貴人。"},
+    {"hexagram": "乾", "text": "飛龍在天，利見大人。", "meaning": "事業騰飛之際，把握機遇大展宏圖。"},
+    {"hexagram": "乾", "text": "亢龍有悔。", "meaning": "盛極必衰，功成名就時更需謙虛。"},
+    # 坤卦
+    {"hexagram": "坤", "text": "地勢坤，君子以厚德載物。", "meaning": "大地承載萬物，君子應以寬厚的德行包容一切。"},
+    {"hexagram": "坤", "text": "履霜，堅冰至。", "meaning": "見微知著，小事預示大變化。"},
+    {"hexagram": "坤", "text": "黃裳，元吉。", "meaning": "謙虛內斂，必獲大吉。"},
+    # 屯卦
+    {"hexagram": "屯", "text": "雲雷屯，君子以經綸。", "meaning": "萬事開頭難，需要籌劃經營。"},
+    # 蒙卦
+    {"hexagram": "蒙", "text": "蒙以養正，聖功也。", "meaning": "啟蒙教育要培養正道，這是聖人的功業。"},
+    # 需卦
+    {"hexagram": "需", "text": "需，須也。險在前也。", "meaning": "等待是智慧，前方有險更需耐心。"},
+    # 訟卦
+    {"hexagram": "訟", "text": "訟，不親也。", "meaning": "爭訟使人疏遠，和為貴。"},
+    # 師卦
+    {"hexagram": "師", "text": "師出以律，否臧凶。", "meaning": "行事要有紀律，否則必有災禍。"},
+    # 比卦
+    {"hexagram": "比", "text": "比，吉也。比，輔也。", "meaning": "親近輔助他人，必得吉祥。"},
+    # 泰卦
+    {"hexagram": "泰", "text": "天地交，泰。", "meaning": "天地交融，萬物亨通。"},
+    {"hexagram": "泰", "text": "小往大來，吉亨。", "meaning": "付出雖小，收穫必大。"},
+    # 否卦
+    {"hexagram": "否", "text": "否之匪人，不利君子貞。", "meaning": "閉塞之時，君子宜守正不動。"},
+    {"hexagram": "否", "text": "否極泰來。", "meaning": "困境到了極點，好運即將來臨。"},
+    # 同人卦
+    {"hexagram": "同人", "text": "同人于野，亨。", "meaning": "志同道合，無往不利。"},
+    # 大有卦
+    {"hexagram": "大有", "text": "火在天上，大有。", "meaning": "光明普照，豐收之象。"},
+    # 謙卦
+    {"hexagram": "謙", "text": "謙，亨，君子有終。", "meaning": "謙虛使人進步，君子終有好結果。"},
+    {"hexagram": "謙", "text": "謙謙君子，卑以自牧。", "meaning": "謙虛的君子，以謙卑修養自己。"},
+    # 豫卦
+    {"hexagram": "豫", "text": "豫，利建侯行師。", "meaning": "和悅之時，利於建功立業。"},
+    # 隨卦
+    {"hexagram": "隨", "text": "隨，元亨利貞，無咎。", "meaning": "順勢而為，大吉大利。"},
+    # 觀卦
+    {"hexagram": "觀", "text": "觀國之光，利用賓于王。", "meaning": "觀察形勢，把握時機。"},
+    # 復卦
+    {"hexagram": "復", "text": "復，亨。出入無疾。", "meaning": "回歸正道，出入平安。"},
+    {"hexagram": "復", "text": "不遠復，無祗悔，元吉。", "meaning": "及時回頭，大吉大利。"},
+    # 無妄卦
+    {"hexagram": "無妄", "text": "無妄之往，何之矣。", "meaning": "誠實無妄，何處不可去。"},
+    # 頤卦
+    {"hexagram": "頤", "text": "君子以慎言語，節飲食。", "meaning": "謹慎言語，節制飲食。"},
+    # 大過卦
+    {"hexagram": "大過", "text": "棟隆之吉，不橈乎下也。", "meaning": "堅守原則，不為外物所動。"},
+    # 坎卦
+    {"hexagram": "坎", "text": "習坎，有孚，維心亨。", "meaning": "重重險阻，心存誠信方可亨通。"},
+    # 離卦
+    {"hexagram": "離", "text": "離，利貞，亨。", "meaning": "光明依附正道，萬事亨通。"},
+    # 咸卦
+    {"hexagram": "咸", "text": "咸，感也。", "meaning": "真誠感應，心意相通。"},
+    # 恆卦
+    {"hexagram": "恆", "text": "恆，亨無咎，利貞。", "meaning": "恆心持久，必無災咎。"},
+    {"hexagram": "恆", "text": "天地之道，恆久而不已也。", "meaning": "天地之道在於恆久不息。"},
+    # 遯卦
+    {"hexagram": "遯", "text": "遯之時義大矣哉。", "meaning": "適時退讓，意義重大。"},
+    # 大壯卦
+    {"hexagram": "大壯", "text": "君子以非禮弗履。", "meaning": "君子不做不合禮義之事。"},
+    # 晉卦
+    {"hexagram": "晉", "text": "明出地上，晉。", "meaning": "光明從地面升起，象徵進步。"},
+    # 明夷卦
+    {"hexagram": "明夷", "text": "內文明而外柔順。", "meaning": "內心光明，外表柔順。"},
+    # 家人卦
+    {"hexagram": "家人", "text": "家人，女正位乎內，男正位乎外。", "meaning": "各安其位，家庭和睦。"},
+    # 睽卦
+    {"hexagram": "睽", "text": "天地睽而其事同也。", "meaning": "表面對立，本質相同。"},
+    # 蹇卦
+    {"hexagram": "蹇", "text": "見險而能止，知矣哉。", "meaning": "見到危險能夠停止，這是智慧。"},
+    # 解卦
+    {"hexagram": "解", "text": "天地解而雷雨作。", "meaning": "困難解除，萬物生發。"},
+    # 損卦
+    {"hexagram": "損", "text": "損益盈虛，與時偕行。", "meaning": "得失盈虧，要順應時勢。"},
+    {"hexagram": "損", "text": "君子以懲忿窒欲。", "meaning": "君子要克制憤怒，節制欲望。"},
+    # 益卦
+    {"hexagram": "益", "text": "君子以見善則遷，有過則改。", "meaning": "見賢思齊，有過必改。"},
+    # 夬卦
+    {"hexagram": "夬", "text": "剛決柔也，健而說。", "meaning": "以剛決斷，健行而喜悅。"},
+    # 姤卦
+    {"hexagram": "姤", "text": "天地相遇，品物咸章。", "meaning": "天地相遇，萬物明亮。"},
+    # 萃卦
+    {"hexagram": "萃", "text": "萃，聚也。", "meaning": "聚集團結，共同前進。"},
+    # 升卦
+    {"hexagram": "升", "text": "積小以高大。", "meaning": "積少成多，終成大業。"},
+    # 困卦
+    {"hexagram": "困", "text": "困而不失其所亨。", "meaning": "身處困境，仍不失志向。"},
+    {"hexagram": "困", "text": "君子以致命遂志。", "meaning": "君子即使犧牲性命也要實現志向。"},
+    # 井卦
+    {"hexagram": "井", "text": "井，德之地也。", "meaning": "井水養人，象徵美德。"},
+    # 革卦
+    {"hexagram": "革", "text": "革，去故也。", "meaning": "革新除舊，與時俱進。"},
+    {"hexagram": "革", "text": "天地革而四時成。", "meaning": "天地變革而四季運行。"},
+    # 鼎卦
+    {"hexagram": "鼎", "text": "鼎，元吉，亨。", "meaning": "鼎新之象，大吉大利。"},
+    # 震卦
+    {"hexagram": "震", "text": "震來虩虩，笑言啞啞。", "meaning": "雷聲震動後，談笑自若。"},
+    # 艮卦
+    {"hexagram": "艮", "text": "艮其背，不獲其身。", "meaning": "止於當止，不被外物所動。"},
+    {"hexagram": "艮", "text": "時止則止，時行則行。", "meaning": "該停則停，該行則行。"},
+    # 漸卦
+    {"hexagram": "漸", "text": "漸之進也，女歸吉。", "meaning": "循序漸進，必得吉祥。"},
+    # 歸妹卦
+    {"hexagram": "歸妹", "text": "天地之大義也。", "meaning": "婚姻是天地間的大義。"},
+    # 豐卦
+    {"hexagram": "豐", "text": "豐，大也。明以動，故豐。", "meaning": "光明而行動，故能豐盛。"},
+    # 旅卦
+    {"hexagram": "旅", "text": "旅，小亨，旅貞吉。", "meaning": "旅途中守正，必獲吉祥。"},
+    # 巽卦
+    {"hexagram": "巽", "text": "隨風，巽。君子以申命行事。", "meaning": "順從如風，依令行事。"},
+    # 兌卦
+    {"hexagram": "兌", "text": "兌，說也。剛中而柔外。", "meaning": "喜悅之道，剛中柔外。"},
+    {"hexagram": "兌", "text": "君子以朋友講習。", "meaning": "君子與朋友切磋學習。"},
+    # 渙卦
+    {"hexagram": "渙", "text": "風行水上，渙。", "meaning": "風行水上，散而後聚。"},
+    # 節卦
+    {"hexagram": "節", "text": "節以制度，不傷財，不害民。", "meaning": "節制有度，利國利民。"},
+    # 中孚卦
+    {"hexagram": "中孚", "text": "中孚，信及豚魚也。", "meaning": "誠信之德，感動萬物。"},
+    # 小過卦
+    {"hexagram": "小過", "text": "可小事，不可大事。", "meaning": "宜做小事，不宜做大事。"},
+    # 既濟卦
+    {"hexagram": "既濟", "text": "君子以思患而預防之。", "meaning": "君子居安思危，預防禍患。"},
+    # 未濟卦
+    {"hexagram": "未濟", "text": "物不可窮也，故受之以未濟。", "meaning": "事物不會窮盡，所以以未濟結束。"},
+    # 繫辭傳名言
+    {"hexagram": "繫辭", "text": "易窮則變，變則通，通則久。", "meaning": "事物窮極必變，變化則通達，通達則長久。"},
+    {"hexagram": "繫辭", "text": "一陰一陽之謂道。", "meaning": "陰陽交替運行，這就是天道。"},
+    {"hexagram": "繫辭", "text": "天尊地卑，乾坤定矣。", "meaning": "天高地低，乾坤定位。"},
+    {"hexagram": "繫辭", "text": "生生之謂易。", "meaning": "生生不息，這就是易。"},
+    {"hexagram": "繫辭", "text": "仁者見之謂之仁，智者見之謂之智。", "meaning": "仁者見仁，智者見智。"},
+    {"hexagram": "繫辭", "text": "君子藏器於身，待時而動。", "meaning": "君子懷才不露，等待時機。"},
+    {"hexagram": "繫辭", "text": "善不積不足以成名，惡不積不足以滅身。", "meaning": "善行要積累才能成名，惡行積累終將滅身。"},
+    {"hexagram": "繫辭", "text": "積善之家，必有餘慶；積不善之家，必有餘殃。", "meaning": "行善之家必有福報，作惡之家必有災殃。"},
+    {"hexagram": "繫辭", "text": "德薄而位尊，智小而謀大，力小而任重，鮮不及矣。", "meaning": "德行淺薄卻身居高位，智慧不足卻謀劃大事，力量微小卻承擔重任，很少有不失敗的。"},
+    {"hexagram": "繫辭", "text": "窮則變，變則通。", "meaning": "困境到了盡頭就會變化，變化就能通達。"},
+]
+
+# 太極圖片 URL
+TAIJI_IMAGE_URL = 'https://hml1980.github.io/laibai-linebot/images/taiji_ritual.png'
 
 # 64卦每日運勢（根據傳統卦義編寫）
 DAILY_HEXAGRAMS = {
@@ -2709,6 +2857,69 @@ def create_history_flex(records):
         }
     }
 
+def create_wisdom_flex(wisdom):
+    """易經智慧 Flex Message"""
+    return {
+        "type": "bubble",
+        "size": "kilo",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#1a1a2e",
+            "paddingAll": "20px",
+            "contents": [
+                {"type": "text", "text": "☯ 易經智慧 ☯", "weight": "bold", "size": "lg", "color": "#FFFFFF", "align": "center"},
+                {"type": "text", "text": f"《{wisdom['hexagram']}》", "size": "sm", "color": "#FFD700", "align": "center", "margin": "sm"}
+            ]
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "25px",
+            "backgroundColor": "#F5F5F0",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "paddingAll": "20px",
+                    "backgroundColor": "#FFFFFF",
+                    "cornerRadius": "12px",
+                    "contents": [
+                        {"type": "text", "text": f"「{wisdom['text']}」", "size": "lg", "weight": "bold", "color": "#1a1a2e", "align": "center", "wrap": True},
+                    ]
+                },
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "marginTop": "20px",
+                    "paddingAll": "15px",
+                    "backgroundColor": "#FFF8E7",
+                    "cornerRadius": "8px",
+                    "contents": [
+                        {"type": "text", "text": "📖 釋義", "size": "sm", "weight": "bold", "color": "#8B4513"},
+                        {"type": "text", "text": wisdom['meaning'], "size": "sm", "color": "#666666", "wrap": True, "margin": "sm"}
+                    ]
+                }
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "15px",
+            "backgroundColor": "#F5F5F5",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {"type": "button", "action": {"type": "message", "label": "🔄 再抽一句", "text": "易經智慧"}, "style": "primary", "color": "#1a1a2e", "flex": 1},
+                        {"type": "button", "action": {"type": "message", "label": "🏠 回首頁", "text": "首頁"}, "style": "secondary", "flex": 1, "margin": "md"}
+                    ]
+                }
+            ]
+        }
+    }
+
 def create_daily_fortune_flex(fortune, is_premium=False):
     """每日運勢 Flex Message - 基於易經64卦"""
     
@@ -3422,6 +3633,14 @@ def handle_message(event):
                 messages=[FlexMessage(alt_text="占卜紀錄", contents=FlexContainer.from_dict(create_history_flex(records)))]
             ))
         
+        # 易經智慧
+        elif msg in ['易經智慧', '智慧', '易經', '名言', '語錄']:
+            wisdom = random.choice(YIJING_WISDOM)
+            api.reply_message(ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[FlexMessage(alt_text="易經智慧", contents=FlexContainer.from_dict(create_wisdom_flex(wisdom)))]
+            ))
+        
         # 處理問事輸入（已選擇分類，等待輸入問題）
         elif pending and pending['question'] == '__WAITING__':
             category = pending['category']
@@ -3484,7 +3703,7 @@ def handle_message(event):
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "5.8"}
+    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "5.9"}
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=True)
