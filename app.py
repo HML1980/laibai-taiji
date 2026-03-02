@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-籟柏太極易占 LINE Bot v5.9
+籟柏太極易占 LINE Bot v6.0
 功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧
 
 Author: SAROW / 籟柏
 License: MIT
-Version: 5.9
+Version: 6.0
 """
 
 import os
@@ -31,7 +31,7 @@ from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
     TextMessage, FlexMessage, FlexContainer
 )
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, FollowEvent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, FollowEvent, PostbackEvent
 from linebot.v3.exceptions import InvalidSignatureError
 from dotenv import load_dotenv
 
@@ -2154,7 +2154,7 @@ def create_category_input_flex(category):
     for full_q, short_label in questions:
         buttons.append({
             "type": "button",
-            "action": {"type": "message", "label": short_label, "text": f"問題:{category}:{full_q}"},
+            "action": {"type": "postback", "label": short_label, "data": f"問題:{category}:{full_q}", "displayText": f"🔮 {short_label}"},
             "style": "secondary",
             "height": "sm",
             "margin": "sm"
@@ -3701,9 +3701,79 @@ def handle_message(event):
                 messages=[TextMessage(text="☯ 太極陰陽魚易占 ☯\n\n輸入「問事」開始問事占卜\n輸入「運勢」查看今日運勢\n輸入「簽到」每日簽到\n輸入「說明」查看使用方式\n輸入「VIP」了解進階功能\n\n🙏 心誠則靈")]
             ))
 
+@handler.add(PostbackEvent)
+def handle_postback(event):
+    """處理 Postback 事件（快速問題按鈕）"""
+    user_id = event.source.user_id if hasattr(event.source, 'user_id') else None
+    data = event.postback.data
+    
+    with ApiClient(configuration) as api_client:
+        api = MessagingApi(api_client)
+        user = get_user(user_id)
+        
+        # VIP 判斷
+        is_premium = False
+        if user['is_premium'] == 1 and user['premium_expires_at']:
+            try:
+                expires_dt = datetime.fromisoformat(user['premium_expires_at'])
+                now_dt = get_tw_now().replace(tzinfo=None)
+                is_premium = expires_dt > now_dt
+            except:
+                is_premium = False
+        
+        user_profile = get_user_profile(user_id)
+        
+        # 快速問題按鈕點擊（格式：問題:分類:問題內容）
+        if data.startswith('問題:'):
+            parts = data.split(':', 2)
+            if len(parts) >= 3:
+                category = parts[1]
+                question = parts[2]
+                
+                can_do, remaining = can_divine(user_id)
+                if not can_do:
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[FlexMessage(alt_text="今日次數已用完", contents=FlexContainer.from_dict(create_limit_reached_flex()))]
+                    ))
+                    return
+                
+                result = cast_yinyang_fish(user_id, question)
+                increment_daily_usage(user_id)
+                
+                ai_interp = None
+                if is_premium:
+                    ai_interp = get_ai_interpretation(
+                        result['hexagram']['name'],
+                        result['hexagram']['code'],
+                        question,
+                        result['upper_trigram'],
+                        result['lower_trigram'],
+                        result['hexagram']
+                    )
+                
+                save_divination_record(
+                    user_id,
+                    result['hexagram']['code'],
+                    result['hexagram']['name'],
+                    question,
+                    category,
+                    ai_interp,
+                    result['crystal']['primary']['name'] if is_premium else None
+                )
+                
+                _, remaining = can_divine(user_id)
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[FlexMessage(
+                        alt_text=f"占卜結果：{result['hexagram']['name']}",
+                        contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
+                    )]
+                ))
+
 @app.route("/health", methods=['GET'])
 def health_check():
-    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "5.9"}
+    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.0"}
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=True)
