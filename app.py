@@ -2068,8 +2068,8 @@ def create_ask_question_flex():
                             "layout": "horizontal",
                             "spacing": "sm",
                             "contents": [
-                                {"type": "button", "action": {"type": "message", "label": "💕 感情姻緣", "text": "問事:感情"}, "style": "secondary", "flex": 1, "height": "sm"},
-                                {"type": "button", "action": {"type": "message", "label": "💼 事業工作", "text": "問事:事業"}, "style": "secondary", "flex": 1, "height": "sm"}
+                                {"type": "button", "action": {"type": "postback", "label": "💕 感情姻緣", "data": "問事:感情", "displayText": "💕 感情姻緣"}, "style": "secondary", "flex": 1, "height": "sm"},
+                                {"type": "button", "action": {"type": "postback", "label": "💼 事業工作", "data": "問事:事業", "displayText": "💼 事業工作"}, "style": "secondary", "flex": 1, "height": "sm"}
                             ]
                         },
                         {
@@ -2077,8 +2077,8 @@ def create_ask_question_flex():
                             "layout": "horizontal",
                             "spacing": "sm",
                             "contents": [
-                                {"type": "button", "action": {"type": "message", "label": "💰 財運投資", "text": "問事:財運"}, "style": "secondary", "flex": 1, "height": "sm"},
-                                {"type": "button", "action": {"type": "message", "label": "🏥 健康平安", "text": "問事:健康"}, "style": "secondary", "flex": 1, "height": "sm"}
+                                {"type": "button", "action": {"type": "postback", "label": "💰 財運投資", "data": "問事:財運", "displayText": "💰 財運投資"}, "style": "secondary", "flex": 1, "height": "sm"},
+                                {"type": "button", "action": {"type": "postback", "label": "🏥 健康平安", "data": "問事:健康", "displayText": "🏥 健康平安"}, "style": "secondary", "flex": 1, "height": "sm"}
                             ]
                         },
                         {
@@ -2086,8 +2086,8 @@ def create_ask_question_flex():
                             "layout": "horizontal",
                             "spacing": "sm",
                             "contents": [
-                                {"type": "button", "action": {"type": "message", "label": "📚 考試學業", "text": "問事:學業"}, "style": "secondary", "flex": 1, "height": "sm"},
-                                {"type": "button", "action": {"type": "message", "label": "🔮 綜合運勢", "text": "問事:綜合"}, "style": "secondary", "flex": 1, "height": "sm"}
+                                {"type": "button", "action": {"type": "postback", "label": "📚 考試學業", "data": "問事:學業", "displayText": "📚 考試學業"}, "style": "secondary", "flex": 1, "height": "sm"},
+                                {"type": "button", "action": {"type": "postback", "label": "🔮 綜合運勢", "data": "問事:綜合", "displayText": "🔮 綜合運勢"}, "style": "secondary", "flex": 1, "height": "sm"}
                             ]
                         }
                     ]
@@ -2231,11 +2231,11 @@ def create_profile_gender_flex():
                     "margin": "xl",
                     "spacing": "md",
                     "contents": [
-                        {"type": "button", "action": {"type": "message", "label": "👨 男性", "text": "資料:性別:男"}, "style": "secondary", "flex": 1, "height": "sm"},
-                        {"type": "button", "action": {"type": "message", "label": "👩 女性", "text": "資料:性別:女"}, "style": "secondary", "flex": 1, "height": "sm"}
+                        {"type": "button", "action": {"type": "postback", "label": "👨 男性", "data": "資料:性別:男", "displayText": "👨 男性"}, "style": "secondary", "flex": 1, "height": "sm"},
+                        {"type": "button", "action": {"type": "postback", "label": "👩 女性", "data": "資料:性別:女", "displayText": "👩 女性"}, "style": "secondary", "flex": 1, "height": "sm"}
                     ]
                 },
-                {"type": "button", "action": {"type": "message", "label": "🔮 不透露", "text": "資料:性別:不透露"}, "style": "secondary", "margin": "md", "height": "sm"}
+                {"type": "button", "action": {"type": "postback", "label": "🔮 不透露", "data": "資料:性別:不透露", "displayText": "🔮 不透露"}, "style": "secondary", "margin": "md", "height": "sm"}
             ]
         }
     }
@@ -2272,8 +2272,8 @@ def create_profile_age_flex():
                             "layout": "horizontal",
                             "spacing": "sm",
                             "contents": [
-                                {"type": "button", "action": {"type": "message", "label": "18-25歲", "text": "資料:年齡:18-25"}, "style": "secondary", "flex": 1, "height": "sm"},
-                                {"type": "button", "action": {"type": "message", "label": "26-35歲", "text": "資料:年齡:26-35"}, "style": "secondary", "flex": 1, "height": "sm"}
+                                {"type": "button", "action": {"type": "postback", "label": "18-25歲", "data": "資料:年齡:18-25", "displayText": "18-25歲"}, "style": "secondary", "flex": 1, "height": "sm"},
+                                {"type": "button", "action": {"type": "postback", "label": "26-35歲", "data": "資料:年齡:26-35", "displayText": "26-35歲"}, "style": "secondary", "flex": 1, "height": "sm"}
                             ]
                         },
                         {
@@ -2281,8 +2281,8 @@ def create_profile_age_flex():
                             "layout": "horizontal",
                             "spacing": "sm",
                             "contents": [
-                                {"type": "button", "action": {"type": "message", "label": "36-45歲", "text": "資料:年齡:36-45"}, "style": "secondary", "flex": 1, "height": "sm"},
-                                {"type": "button", "action": {"type": "message", "label": "46-55歲", "text": "資料:年齡:46-55"}, "style": "secondary", "flex": 1, "height": "sm"}
+                                {"type": "button", "action": {"type": "postback", "label": "36-45歲", "data": "資料:年齡:36-45", "displayText": "36-45歲"}, "style": "secondary", "flex": 1, "height": "sm"},
+                                {"type": "button", "action": {"type": "postback", "label": "46-55歲", "data": "資料:年齡:46-55", "displayText": "46-55歲"}, "style": "secondary", "flex": 1, "height": "sm"}
                             ]
                         },
                         {
@@ -2290,8 +2290,8 @@ def create_profile_age_flex():
                             "layout": "horizontal",
                             "spacing": "sm",
                             "contents": [
-                                {"type": "button", "action": {"type": "message", "label": "56歲以上", "text": "資料:年齡:56+"}, "style": "secondary", "flex": 1, "height": "sm"},
-                                {"type": "button", "action": {"type": "message", "label": "不透露", "text": "資料:年齡:不透露"}, "style": "secondary", "flex": 1, "height": "sm"}
+                                {"type": "button", "action": {"type": "postback", "label": "56歲以上", "data": "資料:年齡:56+", "displayText": "56歲以上"}, "style": "secondary", "flex": 1, "height": "sm"},
+                                {"type": "button", "action": {"type": "postback", "label": "不透露", "data": "資料:年齡:不透露", "displayText": "不透露"}, "style": "secondary", "flex": 1, "height": "sm"}
                             ]
                         }
                     ]
@@ -2328,10 +2328,10 @@ def create_profile_marital_flex():
                     "margin": "lg",
                     "spacing": "sm",
                     "contents": [
-                        {"type": "button", "action": {"type": "message", "label": "💑 已婚/同居", "text": "資料:婚姻:married"}, "style": "secondary", "height": "sm"},
-                        {"type": "button", "action": {"type": "message", "label": "💕 戀愛中", "text": "資料:婚姻:relationship"}, "style": "secondary", "height": "sm"},
-                        {"type": "button", "action": {"type": "message", "label": "💫 單身", "text": "資料:婚姻:single"}, "style": "secondary", "height": "sm"},
-                        {"type": "button", "action": {"type": "message", "label": "🔮 不透露", "text": "資料:婚姻:不透露"}, "style": "secondary", "height": "sm"}
+                        {"type": "button", "action": {"type": "postback", "label": "💑 已婚/同居", "data": "資料:婚姻:married", "displayText": "💑 已婚/同居"}, "style": "secondary", "height": "sm"},
+                        {"type": "button", "action": {"type": "postback", "label": "💕 戀愛中", "data": "資料:婚姻:relationship", "displayText": "💕 戀愛中"}, "style": "secondary", "height": "sm"},
+                        {"type": "button", "action": {"type": "postback", "label": "💫 單身", "data": "資料:婚姻:single", "displayText": "💫 單身"}, "style": "secondary", "height": "sm"},
+                        {"type": "button", "action": {"type": "postback", "label": "🔮 不透露", "data": "資料:婚姻:不透露", "displayText": "🔮 不透露"}, "style": "secondary", "height": "sm"}
                     ]
                 }
             ]
@@ -3703,7 +3703,7 @@ def handle_message(event):
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
-    """處理 Postback 事件（快速問題按鈕）"""
+    """處理 Postback 事件（快速問題按鈕、分類選擇、用戶資料）"""
     user_id = event.source.user_id if hasattr(event.source, 'user_id') else None
     data = event.postback.data
     
@@ -3722,6 +3722,22 @@ def handle_postback(event):
                 is_premium = False
         
         user_profile = get_user_profile(user_id)
+        pending_profile = get_pending_profile(user_id)
+        
+        # 問事分類選擇（格式：問事:分類名）
+        if data.startswith('問事:') and data.count(':') == 1:
+            category_map = {
+                '感情': 'love', '事業': 'career', '財運': 'wealth',
+                '健康': 'health', '學業': 'study', '綜合': 'general'
+            }
+            cat_name = data.replace('問事:', '')
+            category = category_map.get(cat_name, 'general')
+            save_pending_question(user_id, '__WAITING__', category)
+            api.reply_message(ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[FlexMessage(alt_text=f"{cat_name}問事", contents=FlexContainer.from_dict(create_category_input_flex(category)))]
+            ))
+            return
         
         # 快速問題按鈕點擊（格式：問題:分類:問題內容）
         if data.startswith('問題:'):
@@ -3770,6 +3786,43 @@ def handle_postback(event):
                         contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
                     )]
                 ))
+            return
+        
+        # 用戶資料收集（格式：資料:欄位:值）
+        if data.startswith('資料:'):
+            parts = data.split(':')
+            if len(parts) >= 3:
+                field = parts[1]
+                value = parts[2]
+                
+                if field == '性別':
+                    save_pending_profile(user_id, 'age', value, None)
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[FlexMessage(alt_text="年齡選擇", contents=FlexContainer.from_dict(create_profile_age_flex()))]
+                    ))
+                    return
+                
+                elif field == '年齡':
+                    if pending_profile:
+                        save_pending_profile(user_id, 'marital', pending_profile['gender'], value)
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[FlexMessage(alt_text="感情狀態選擇", contents=FlexContainer.from_dict(create_profile_marital_flex()))]
+                    ))
+                    return
+                
+                elif field == '婚姻':
+                    if pending_profile:
+                        marital_map = {'married': 'married', 'relationship': 'relationship', 'single': 'single', '不透露': 'single'}
+                        marital_status = marital_map.get(value, 'single')
+                        save_user_profile(user_id, pending_profile['gender'], pending_profile['age_range'], marital_status)
+                        clear_pending_profile(user_id)
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[FlexMessage(alt_text="資料設定完成", contents=FlexContainer.from_dict(create_profile_complete_flex()))]
+                    ))
+                    return
 
 @app.route("/health", methods=['GET'])
 def health_check():
