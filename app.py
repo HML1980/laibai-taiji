@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-籟柏太極易占 LINE Bot v6.0
-功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧
+籟柏太極易占 LINE Bot v6.1
+功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧、搖卦儀式
 
 Author: SAROW / 籟柏
 License: MIT
-Version: 6.0
+Version: 6.1
 """
 
 import os
@@ -29,7 +29,7 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
-    TextMessage, FlexMessage, FlexContainer
+    TextMessage, FlexMessage, FlexContainer, ImageMessage
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, FollowEvent, PostbackEvent
 from linebot.v3.exceptions import InvalidSignatureError
@@ -305,7 +305,7 @@ YIJING_WISDOM = [
 ]
 
 # 太極圖片 URL
-TAIJI_IMAGE_URL = 'https://hml1980.github.io/laibai-linebot/images/taiji_ritual.png'
+TAIJI_IMAGE_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_ritual.png'
 
 # 64卦每日運勢（根據傳統卦義編寫）
 DAILY_HEXAGRAMS = {
@@ -1683,6 +1683,45 @@ def cast_yinyang_fish(user_id=None, question=None):
         'question': question,
         'timestamp': now.strftime('%Y-%m-%d %H:%M:%S')
     }
+
+def generate_yao_sequence(user_id, question):
+    """生成六爻序列（用於儀式展示）"""
+    today = get_tw_now().strftime('%Y-%m-%d')
+    seed_str = f"{user_id or ''}{question or ''}{today}"
+    seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+    random.seed(seed_hash)
+    
+    yao_symbols = []
+    yao_names = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻']
+    
+    for i in range(6):
+        is_yang = random.random() > 0.5
+        symbol = '⚊' if is_yang else '⚋'
+        nature = '陽' if is_yang else '陰'
+        yao_symbols.append((yao_names[i], symbol, nature))
+    
+    random.seed()
+    return yao_symbols
+
+def format_ritual_message(question, yao_sequence):
+    """格式化搖卦儀式文字"""
+    lines = [
+        "🙏 靜心凝神...",
+        f"",
+        f"📿 誠心默念問題：",
+        f"「{question}」",
+        "",
+        "☯ 搖卦中...",
+        ""
+    ]
+    
+    for name, symbol, nature in yao_sequence:
+        lines.append(f"  {name} {symbol} ({nature})")
+    
+    lines.append("")
+    lines.append("✨ 卦象已成...")
+    
+    return "\n".join(lines)
 
 # ============================================================
 # Flex Messages（重新設計）
@@ -3412,7 +3451,7 @@ def handle_message(event):
                 messages=[FlexMessage(alt_text=f"{cat_name}問事", contents=FlexContainer.from_dict(create_category_input_flex(category)))]
             ))
         
-        # 快速問題按鈕點擊（格式：問題:分類:問題內容）
+        # 快速問題按鈕點擊（格式：問題:分類:問題內容）- 相容舊版
         elif msg.startswith('問題:'):
             parts = msg.split(':', 2)
             if len(parts) >= 3:
@@ -3426,6 +3465,10 @@ def handle_message(event):
                         messages=[FlexMessage(alt_text="今日次數已用完", contents=FlexContainer.from_dict(create_limit_reached_flex()))]
                     ))
                     return
+                
+                # 生成搖卦儀式
+                yao_sequence = generate_yao_sequence(user_id, question)
+                ritual_text = format_ritual_message(question, yao_sequence)
                 
                 result = cast_yinyang_fish(user_id, question)
                 increment_daily_usage(user_id)
@@ -3454,10 +3497,14 @@ def handle_message(event):
                 _, remaining = can_divine(user_id)
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[FlexMessage(
-                        alt_text=f"占卜結果：{result['hexagram']['name']}",
-                        contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
-                    )]
+                    messages=[
+                        ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
+                        TextMessage(text=ritual_text),
+                        FlexMessage(
+                            alt_text=f"占卜結果：{result['hexagram']['name']}",
+                            contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
+                        )
+                    ]
                 ))
         
         # 說明指令
@@ -3666,6 +3713,10 @@ def handle_message(event):
                 ))
                 return
             
+            # 生成搖卦儀式
+            yao_sequence = generate_yao_sequence(user_id, question)
+            ritual_text = format_ritual_message(question, yao_sequence)
+            
             result = cast_yinyang_fish(user_id, question)
             increment_daily_usage(user_id)
             
@@ -3693,10 +3744,14 @@ def handle_message(event):
             _, remaining = can_divine(user_id)
             api.reply_message(ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[FlexMessage(
-                    alt_text=f"占卜結果：{result['hexagram']['name']}",
-                    contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
-                )]
+                messages=[
+                    ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
+                    TextMessage(text=ritual_text),
+                    FlexMessage(
+                        alt_text=f"占卜結果：{result['hexagram']['name']}",
+                        contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
+                    )
+                ]
             ))
         
         # 其他訊息
@@ -3759,6 +3814,10 @@ def handle_postback(event):
                     ))
                     return
                 
+                # 生成搖卦儀式
+                yao_sequence = generate_yao_sequence(user_id, question)
+                ritual_text = format_ritual_message(question, yao_sequence)
+                
                 result = cast_yinyang_fish(user_id, question)
                 increment_daily_usage(user_id)
                 
@@ -3786,10 +3845,14 @@ def handle_postback(event):
                 _, remaining = can_divine(user_id)
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[FlexMessage(
-                        alt_text=f"占卜結果：{result['hexagram']['name']}",
-                        contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
-                    )]
+                    messages=[
+                        ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
+                        TextMessage(text=ritual_text),
+                        FlexMessage(
+                            alt_text=f"占卜結果：{result['hexagram']['name']}",
+                            contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
+                        )
+                    ]
                 ))
             return
         
@@ -3831,7 +3894,7 @@ def handle_postback(event):
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.0"}
+    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.1"}
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=True)
