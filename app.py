@@ -1633,20 +1633,25 @@ def generate_trigram_from_fish(is_yang, seed_value):
     return group[seed_value % 4]
 
 def cast_yinyang_fish(user_id=None, question=None):
-    """執行太極陰陽魚占卜"""
+    """執行太極陰陽魚占卜 - 同一天同一問題固定結果"""
     now = get_tw_now()
-    time_seed = now.hour * 3600 + now.minute * 60 + now.second + now.microsecond
+    today = now.strftime('%Y-%m-%d')
     
-    if user_id:
-        time_seed = (time_seed + int(hashlib.md5(user_id.encode()).hexdigest()[:8], 16)) % 1000000
+    # 用 user_id + question + date 生成固定種子
+    seed_str = f"{user_id or ''}{question or ''}{today}"
+    seed_hash = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+    random.seed(seed_hash)
     
     # 第一條魚決定上卦
     fish1_yang = random.random() > 0.5
-    upper_num = generate_trigram_from_fish(fish1_yang, (time_seed + random.randint(0, 9999)) % 10000)
+    upper_num = generate_trigram_from_fish(fish1_yang, random.randint(0, 9999))
     
     # 第二條魚決定下卦
     fish2_yang = random.random() > 0.5
-    lower_num = generate_trigram_from_fish(fish2_yang, (time_seed + random.randint(0, 9999)) % 10000)
+    lower_num = generate_trigram_from_fish(fish2_yang, random.randint(0, 9999))
+    
+    # 重置隨機種子（避免影響其他隨機操作）
+    random.seed()
     
     upper, lower = TRIGRAMS[upper_num], TRIGRAMS[lower_num]
     code = f"{upper_num}{lower_num}"
