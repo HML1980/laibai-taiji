@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-籟柏太極易占 LINE Bot v6.1
-功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧、搖卦儀式
+籟柏太極易占 LINE Bot v6.2
+功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧、搖卦儀式（兩步驟）
 
 Author: SAROW / 籟柏
 License: MIT
-Version: 6.1
+Version: 6.2
 """
 
 import os
@@ -305,7 +305,7 @@ YIJING_WISDOM = [
 ]
 
 # 太極圖片 URL
-TAIJI_IMAGE_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_ritual.png'
+TAIJI_IMAGE_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_fish.gif'
 
 # 64卦每日運勢（根據傳統卦義編寫）
 DAILY_HEXAGRAMS = {
@@ -1703,23 +1703,32 @@ def generate_yao_sequence(user_id, question):
     random.seed()
     return yao_symbols
 
-def format_ritual_message(question, yao_sequence):
-    """格式化搖卦儀式文字"""
+def format_ritual_message(question):
+    """格式化搖卦儀式文字（開卦前）"""
     lines = [
-        "🙏 靜心凝神...",
-        f"",
-        f"📿 誠心默念問題：",
+        "🙏 請閉眼靜心",
+        "",
+        "📿 在心中默念您的問題三次：",
         f"「{question}」",
         "",
-        "☯ 搖卦中...",
+        "☯ 待心神安定後",
+        "    按下「開卦」揭曉天機..."
+    ]
+    return "\n".join(lines)
+
+def format_result_ritual(question, yao_sequence):
+    """格式化開卦後的儀式文字"""
+    lines = [
+        "✨ 卦象已成 ✨",
+        "",
+        f"📿「{question}」",
+        "",
+        "☯ 六爻呈現：",
         ""
     ]
     
     for name, symbol, nature in yao_sequence:
         lines.append(f"  {name} {symbol} ({nature})")
-    
-    lines.append("")
-    lines.append("✨ 卦象已成...")
     
     return "\n".join(lines)
 
@@ -2901,6 +2910,69 @@ def create_history_flex(records):
         }
     }
 
+def create_ritual_flex(question, category):
+    """搖卦儀式 Flex Message - 含開卦按鈕"""
+    cat_info = QUESTION_CATEGORIES.get(category, QUESTION_CATEGORIES['general'])
+    
+    return {
+        "type": "bubble",
+        "size": "kilo",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#1a1a2e",
+            "paddingAll": "20px",
+            "contents": [
+                {"type": "text", "text": "☯ 太極問事 ☯", "weight": "bold", "size": "lg", "color": "#FFD700", "align": "center"},
+                {"type": "text", "text": f"{cat_info['icon']} {cat_info['name']}", "size": "sm", "color": "#FFFFFF", "align": "center", "margin": "sm"}
+            ]
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "20px",
+            "backgroundColor": "#F5F5F0",
+            "contents": [
+                {"type": "text", "text": "🙏 請閉眼靜心", "size": "lg", "weight": "bold", "color": "#1a1a2e", "align": "center"},
+                {"type": "separator", "margin": "lg"},
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "margin": "lg",
+                    "paddingAll": "15px",
+                    "backgroundColor": "#FFFFFF",
+                    "cornerRadius": "10px",
+                    "contents": [
+                        {"type": "text", "text": "📿 在心中默念問題三次", "size": "sm", "color": "#666666", "align": "center"},
+                        {"type": "text", "text": f"「{question}」", "size": "md", "weight": "bold", "color": "#1a1a2e", "align": "center", "wrap": True, "margin": "md"}
+                    ]
+                },
+                {"type": "text", "text": "☯ 待心神安定後", "size": "sm", "color": "#888888", "align": "center", "margin": "lg"},
+                {"type": "text", "text": "按下「開卦」揭曉天機", "size": "sm", "color": "#888888", "align": "center"}
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "paddingAll": "15px",
+            "backgroundColor": "#1a1a2e",
+            "contents": [
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "postback",
+                        "label": "🔮 開卦",
+                        "data": f"開卦:{category}:{question}",
+                        "displayText": "🔮 開卦"
+                    },
+                    "style": "primary",
+                    "color": "#FFD700",
+                    "height": "md"
+                }
+            ]
+        }
+    }
+
 def create_wisdom_flex(wisdom):
     """易經智慧 Flex Message"""
     return {
@@ -3451,7 +3523,7 @@ def handle_message(event):
                 messages=[FlexMessage(alt_text=f"{cat_name}問事", contents=FlexContainer.from_dict(create_category_input_flex(category)))]
             ))
         
-        # 快速問題按鈕點擊（格式：問題:分類:問題內容）- 相容舊版
+        # 快速問題按鈕點擊（格式：問題:分類:問題內容）- 相容舊版 → 顯示儀式
         elif msg.startswith('問題:'):
             parts = msg.split(':', 2)
             if len(parts) >= 3:
@@ -3466,44 +3538,12 @@ def handle_message(event):
                     ))
                     return
                 
-                # 生成搖卦儀式
-                yao_sequence = generate_yao_sequence(user_id, question)
-                ritual_text = format_ritual_message(question, yao_sequence)
-                
-                result = cast_yinyang_fish(user_id, question)
-                increment_daily_usage(user_id)
-                
-                ai_interp = None
-                if is_premium:
-                    ai_interp = get_ai_interpretation(
-                        result['hexagram']['name'],
-                        result['hexagram']['code'],
-                        question,
-                        result['upper_trigram'],
-                        result['lower_trigram'],
-                        result['hexagram']
-                    )
-                
-                save_divination_record(
-                    user_id,
-                    result['hexagram']['code'],
-                    result['hexagram']['name'],
-                    question,
-                    category,
-                    ai_interp,
-                    result['crystal']['primary']['name'] if is_premium else None
-                )
-                
-                _, remaining = can_divine(user_id)
+                # 顯示儀式畫面 + 開卦按鈕
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[
                         ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
-                        TextMessage(text=ritual_text),
-                        FlexMessage(
-                            alt_text=f"占卜結果：{result['hexagram']['name']}",
-                            contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
-                        )
+                        FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
                     ]
                 ))
         
@@ -3693,12 +3733,12 @@ def handle_message(event):
                 messages=[FlexMessage(alt_text="易經智慧", contents=FlexContainer.from_dict(create_wisdom_flex(wisdom)))]
             ))
         
-        # 處理問事輸入（已選擇分類，等待輸入問題）
+        # 處理問事輸入（已選擇分類，等待輸入問題）→ 顯示儀式
         elif pending and pending['question'] == '__WAITING__':
             category = pending['category']
             question = msg
             
-            # 清除並儲存完整問題
+            # 清除 pending 狀態
             conn = sqlite3.connect('yizhan.db')
             c = conn.cursor()
             c.execute('DELETE FROM pending_questions WHERE user_id = ?', (user_id,))
@@ -3713,44 +3753,12 @@ def handle_message(event):
                 ))
                 return
             
-            # 生成搖卦儀式
-            yao_sequence = generate_yao_sequence(user_id, question)
-            ritual_text = format_ritual_message(question, yao_sequence)
-            
-            result = cast_yinyang_fish(user_id, question)
-            increment_daily_usage(user_id)
-            
-            ai_interp = None
-            if is_premium:
-                ai_interp = get_ai_interpretation(
-                    result['hexagram']['name'],
-                    result['hexagram']['code'],
-                    question,
-                    result['upper_trigram'],
-                    result['lower_trigram'],
-                    result['hexagram']
-                )
-            
-            save_divination_record(
-                user_id,
-                result['hexagram']['code'],
-                result['hexagram']['name'],
-                question,
-                category,
-                ai_interp,
-                result['crystal']['primary']['name'] if is_premium else None
-            )
-            
-            _, remaining = can_divine(user_id)
+            # 顯示儀式畫面 + 開卦按鈕
             api.reply_message(ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[
                     ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
-                    TextMessage(text=ritual_text),
-                    FlexMessage(
-                        alt_text=f"占卜結果：{result['hexagram']['name']}",
-                        contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
-                    )
+                    FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
                 ]
             ))
         
@@ -3799,7 +3807,7 @@ def handle_postback(event):
             ))
             return
         
-        # 快速問題按鈕點擊（格式：問題:分類:問題內容）
+        # 快速問題按鈕點擊（格式：問題:分類:問題內容）→ 顯示儀式
         if data.startswith('問題:'):
             parts = data.split(':', 2)
             if len(parts) >= 3:
@@ -3814,9 +3822,34 @@ def handle_postback(event):
                     ))
                     return
                 
-                # 生成搖卦儀式
+                # 顯示儀式畫面 + 開卦按鈕
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[
+                        ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
+                        FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
+                    ]
+                ))
+            return
+        
+        # 開卦按鈕點擊（格式：開卦:分類:問題內容）→ 執行占卜
+        if data.startswith('開卦:'):
+            parts = data.split(':', 2)
+            if len(parts) >= 3:
+                category = parts[1]
+                question = parts[2]
+                
+                can_do, remaining = can_divine(user_id)
+                if not can_do:
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[FlexMessage(alt_text="今日次數已用完", contents=FlexContainer.from_dict(create_limit_reached_flex()))]
+                    ))
+                    return
+                
+                # 生成六爻序列
                 yao_sequence = generate_yao_sequence(user_id, question)
-                ritual_text = format_ritual_message(question, yao_sequence)
+                ritual_text = format_result_ritual(question, yao_sequence)
                 
                 result = cast_yinyang_fish(user_id, question)
                 increment_daily_usage(user_id)
@@ -3846,7 +3879,6 @@ def handle_postback(event):
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[
-                        ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
                         TextMessage(text=ritual_text),
                         FlexMessage(
                             alt_text=f"占卜結果：{result['hexagram']['name']}",
@@ -3894,7 +3926,7 @@ def handle_postback(event):
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.1"}
+    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.2"}
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=True)
