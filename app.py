@@ -29,7 +29,7 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi, ReplyMessageRequest,
-    TextMessage, FlexMessage, FlexContainer, ImageMessage
+    TextMessage, FlexMessage, FlexContainer, ImageMessage, VideoMessage
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent, FollowEvent, PostbackEvent
 from linebot.v3.exceptions import InvalidSignatureError
@@ -305,7 +305,8 @@ YIJING_WISDOM = [
 ]
 
 # 太極圖片 URL
-TAIJI_IMAGE_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_fish.gif'
+TAIJI_VIDEO_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_fish.mp4'
+TAIJI_PREVIEW_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_fish_preview.jpg'
 
 # 64卦每日運勢（根據傳統卦義編寫）
 DAILY_HEXAGRAMS = {
@@ -3542,7 +3543,7 @@ def handle_message(event):
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[
-                        ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
+                        VideoMessage(original_content_url=TAIJI_VIDEO_URL, preview_image_url=TAIJI_PREVIEW_URL),
                         FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
                     ]
                 ))
@@ -3757,7 +3758,7 @@ def handle_message(event):
             api.reply_message(ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[
-                    ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
+                    VideoMessage(original_content_url=TAIJI_VIDEO_URL, preview_image_url=TAIJI_PREVIEW_URL),
                     FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
                 ]
             ))
@@ -3826,7 +3827,7 @@ def handle_postback(event):
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[
-                        ImageMessage(original_content_url=TAIJI_IMAGE_URL, preview_image_url=TAIJI_IMAGE_URL),
+                        VideoMessage(original_content_url=TAIJI_VIDEO_URL, preview_image_url=TAIJI_PREVIEW_URL),
                         FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
                     ]
                 ))
