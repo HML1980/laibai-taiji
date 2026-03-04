@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>太極問事 - 靜心開卦</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            padding: 20px;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 350px;
+            width: 100%;
+        }
+        
+        .title {
+            font-size: 24px;
+            color: #FFD700;
+            margin-bottom: 10px;
+        }
+        
+        .question-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .question-label {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        
+        .question-text {
+            font-size: 18px;
+            color: #FFD700;
+            font-weight: bold;
+        }
+        
+        .video-container {
+            width: 100%;
+            max-width: 300px;
+            margin: 20px auto;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+        }
+        
+        .video-container video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .instruction {
+            font-size: 16px;
+            color: #ccc;
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #1a1a2e;
+            border: none;
+            padding: 15px 50px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 20px;
+            display: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:active {
+            transform: scale(0.95);
+        }
+        
+        .btn.show {
+            display: inline-block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .loading {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 215, 0, 0.3);
+            border-top-color: #FFD700;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">☯ 太極問事 ☯</h1>
+        
+        <div class="question-box">
+            <div class="question-label">📿 您的問題</div>
+            <div class="question-text" id="question">載入中...</div>
+        </div>
+        
+        <div class="video-container">
+            <video id="ritual-video" muted playsinline>
+                <source src="https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_fish.mp4" type="video/mp4">
+            </video>
+        </div>
+        
+        <p class="instruction">
+            🙏 請閉眼靜心<br>
+            在心中默念問題三次<br>
+            待影片播放完畢後開卦
+        </p>
+        
+        <button class="btn" id="open-btn" onclick="openGua()">🔮 開卦</button>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 10px; color: #FFD700;">卦象生成中...</p>
+        </div>
+    </div>
+
+    <script>
+        let liffId = null;
+        let question = '';
+        let category = '';
+        
+        // 從 URL 取得參數
+        function getParams() {
+            const params = new URLSearchParams(window.location.search);
+            question = decodeURIComponent(params.get('q') || '');
+            category = params.get('c') || 'general';
+            
+            document.getElementById('question').textContent = question || '未知問題';
+        }
+        
+        // 初始化 LIFF
+        async function initLiff() {
+            try {
+                // 從 URL 取得 LIFF ID（由 Bot 傳入）
+                const params = new URLSearchParams(window.location.search);
+                liffId = '2009324878-nt7JFlct';
+                
+                await liff.init({ liffId: liffId });
+                console.log('LIFF 初始化成功');
+                
+                // 開始播放影片
+                playVideo();
+                
+            } catch (error) {
+                console.error('LIFF 初始化失敗:', error);
+                // 即使 LIFF 失敗，也播放影片
+                playVideo();
+            }
+        }
+        
+        // 播放影片
+        function playVideo() {
+            const video = document.getElementById('ritual-video');
+            
+            video.play().catch(e => {
+                console.log('自動播放失敗，嘗試靜音播放:', e);
+                video.muted = true;
+                video.play();
+            });
+            
+            // 影片播放完畢後顯示按鈕
+            video.addEventListener('ended', function() {
+                document.getElementById('open-btn').classList.add('show');
+            });
+            
+            // 備用：5秒後顯示按鈕（防止影片載入失敗）
+            setTimeout(function() {
+                document.getElementById('open-btn').classList.add('show');
+            }, 6000);
+        }
+        
+        // 開卦
+        async function openGua() {
+            const btn = document.getElementById('open-btn');
+            const loading = document.getElementById('loading');
+            
+            btn.style.display = 'none';
+            loading.classList.add('show');
+            
+            try {
+                if (liff.isInClient()) {
+                    // 在 LINE 內，發送訊息給 Bot
+                    await liff.sendMessages([{
+                        type: 'text',
+                        text: `開卦:${category}:${question}`
+                    }]);
+                    
+                    // 關閉 LIFF
+                    liff.closeWindow();
+                } else {
+                    // 在外部瀏覽器，跳轉回 LINE
+                    alert('請在 LINE 中開啟此頁面');
+                    window.close();
+                }
+            } catch (error) {
+                console.error('發送訊息失敗:', error);
+                loading.classList.remove('show');
+                btn.style.display = 'inline-block';
+                alert('發送失敗，請重試');
+            }
+        }
+        
+        // 頁面載入
+        window.onload = function() {
+            getParams();
+            initLiff();
+        };
+    </script>
+</body>
+</html>
