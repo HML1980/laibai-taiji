@@ -307,6 +307,7 @@ YIJING_WISDOM = [
 # 太極圖片 URL
 TAIJI_VIDEO_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_fish.mp4'
 TAIJI_PREVIEW_URL = 'https://raw.githubusercontent.com/HML1980/laibai-taiji/main/images/taiji_fish_preview.jpg'
+LIFF_RITUAL_URL = 'https://liff.line.me/2009324878-nt7JFlct'
 
 # 64卦每日運勢（根據傳統卦義編寫）
 DAILY_HEXAGRAMS = {
@@ -2912,63 +2913,35 @@ def create_history_flex(records):
     }
 
 def create_ritual_flex(question, category):
-    """搖卦儀式 Flex Message - 含開卦按鈕"""
-    cat_info = QUESTION_CATEGORIES.get(category, QUESTION_CATEGORIES['general'])
+    """搖卦儀式 Flex Message - 開啟 LIFF"""
+    import urllib.parse
+    encoded_q = urllib.parse.quote(question)
+    liff_url = f"{LIFF_RITUAL_URL}?q={encoded_q}&c={category}"
     
     return {
         "type": "bubble",
         "size": "kilo",
-        "header": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": "#1a1a2e",
-            "paddingAll": "20px",
-            "contents": [
-                {"type": "text", "text": "☯ 太極問事 ☯", "weight": "bold", "size": "lg", "color": "#FFD700", "align": "center"},
-                {"type": "text", "text": f"{cat_info['icon']} {cat_info['name']}", "size": "sm", "color": "#FFFFFF", "align": "center", "margin": "sm"}
-            ]
-        },
         "body": {
             "type": "box",
             "layout": "vertical",
             "paddingAll": "20px",
-            "backgroundColor": "#F5F5F0",
-            "contents": [
-                {"type": "text", "text": "🙏 請閉眼靜心", "size": "lg", "weight": "bold", "color": "#1a1a2e", "align": "center"},
-                {"type": "separator", "margin": "lg"},
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "margin": "lg",
-                    "paddingAll": "15px",
-                    "backgroundColor": "#FFFFFF",
-                    "cornerRadius": "10px",
-                    "contents": [
-                        {"type": "text", "text": "📿 在心中默念問題三次", "size": "sm", "color": "#666666", "align": "center"},
-                        {"type": "text", "text": f"「{question}」", "size": "md", "weight": "bold", "color": "#1a1a2e", "align": "center", "wrap": True, "margin": "md"}
-                    ]
-                },
-                {"type": "text", "text": "☯ 待心神安定後", "size": "sm", "color": "#888888", "align": "center", "margin": "lg"},
-                {"type": "text", "text": "按下「開卦」揭曉天機", "size": "sm", "color": "#888888", "align": "center"}
-            ]
-        },
-        "footer": {
-            "type": "box",
-            "layout": "vertical",
-            "paddingAll": "15px",
             "backgroundColor": "#1a1a2e",
             "contents": [
+                {"type": "text", "text": "☯ 太極問事 ☯", "size": "lg", "weight": "bold", "color": "#FFD700", "align": "center"},
+                {"type": "separator", "margin": "lg", "color": "#333333"},
+                {"type": "text", "text": "🙏 請靜心後開卦", "size": "md", "color": "#FFFFFF", "align": "center", "margin": "lg"},
+                {"type": "text", "text": f"「{question}」", "size": "sm", "color": "#FFD700", "align": "center", "wrap": True, "margin": "md"},
                 {
                     "type": "button",
                     "action": {
-                        "type": "postback",
-                        "label": "🔮 開卦",
-                        "data": f"開卦:{category}:{question}",
-                        "displayText": "🔮 開卦"
+                        "type": "uri",
+                        "label": "☯ 開始搖卦",
+                        "uri": liff_url
                     },
                     "style": "primary",
                     "color": "#FFD700",
-                    "height": "md"
+                    "height": "md",
+                    "margin": "xl"
                 }
             ]
         }
@@ -3539,12 +3512,64 @@ def handle_message(event):
                     ))
                     return
                 
-                # 顯示儀式畫面 + 開卦按鈕
+                # 顯示簡潔開卦提示
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))]
+                ))
+        
+        # LIFF 開卦訊息（格式：開卦:分類:問題內容）→ 執行占卜
+        elif msg.startswith('開卦:'):
+            parts = msg.split(':', 2)
+            if len(parts) >= 3:
+                category = parts[1]
+                question = parts[2]
+                
+                can_do, remaining = can_divine(user_id)
+                if not can_do:
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[FlexMessage(alt_text="今日次數已用完", contents=FlexContainer.from_dict(create_limit_reached_flex()))]
+                    ))
+                    return
+                
+                # 生成六爻序列
+                yao_sequence = generate_yao_sequence(user_id, question)
+                ritual_text = format_result_ritual(question, yao_sequence)
+                
+                result = cast_yinyang_fish(user_id, question)
+                increment_daily_usage(user_id)
+                
+                ai_interp = None
+                if is_premium:
+                    ai_interp = get_ai_interpretation(
+                        result['hexagram']['name'],
+                        result['hexagram']['code'],
+                        question,
+                        result['upper_trigram'],
+                        result['lower_trigram'],
+                        result['hexagram']
+                    )
+                
+                save_divination_record(
+                    user_id,
+                    result['hexagram']['code'],
+                    result['hexagram']['name'],
+                    question,
+                    category,
+                    ai_interp,
+                    result['crystal']['primary']['name'] if is_premium else None
+                )
+                
+                _, remaining = can_divine(user_id)
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[
-                        VideoMessage(original_content_url=TAIJI_VIDEO_URL, preview_image_url=TAIJI_PREVIEW_URL),
-                        FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
+                        TextMessage(text=ritual_text),
+                        FlexMessage(
+                            alt_text=f"占卜結果：{result['hexagram']['name']}",
+                            contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
+                        )
                     ]
                 ))
         
@@ -3754,13 +3779,10 @@ def handle_message(event):
                 ))
                 return
             
-            # 顯示儀式畫面 + 開卦按鈕
+            # 顯示儀式畫面 + 開卦按鈕（LIFF）
             api.reply_message(ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[
-                    VideoMessage(original_content_url=TAIJI_VIDEO_URL, preview_image_url=TAIJI_PREVIEW_URL),
-                    FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
-                ]
+                messages=[FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))]
             ))
         
         # 其他訊息
@@ -3823,13 +3845,10 @@ def handle_postback(event):
                     ))
                     return
                 
-                # 顯示儀式畫面 + 開卦按鈕
+                # 顯示簡潔開卦提示
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[
-                        VideoMessage(original_content_url=TAIJI_VIDEO_URL, preview_image_url=TAIJI_PREVIEW_URL),
-                        FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))
-                    ]
+                    messages=[FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))]
                 ))
             return
         
