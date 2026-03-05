@@ -3512,66 +3512,83 @@ def handle_message(event):
                     ))
                     return
                 
-                # 顯示簡潔開卦提示
+                # 儲存問題到 pending，等待 LIFF 開卦
+                save_pending_question(user_id, question, category)
+                
+                # 顯示 LIFF 開卦按鈕
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))]
                 ))
         
-        # LIFF 開卦訊息（格式：開卦:分類:問題內容）→ 執行占卜
-        elif msg.startswith('開卦:'):
-            parts = msg.split(':', 2)
-            if len(parts) >= 3:
-                category = parts[1]
-                question = parts[2]
-                
-                can_do, remaining = can_divine(user_id)
-                if not can_do:
-                    api.reply_message(ReplyMessageRequest(
-                        reply_token=event.reply_token,
-                        messages=[FlexMessage(alt_text="今日次數已用完", contents=FlexContainer.from_dict(create_limit_reached_flex()))]
-                    ))
-                    return
-                
-                # 生成六爻序列
-                yao_sequence = generate_yao_sequence(user_id, question)
-                ritual_text = format_result_ritual(question, yao_sequence)
-                
-                result = cast_yinyang_fish(user_id, question)
-                increment_daily_usage(user_id)
-                
-                ai_interp = None
-                if is_premium:
-                    ai_interp = get_ai_interpretation(
-                        result['hexagram']['name'],
-                        result['hexagram']['code'],
-                        question,
-                        result['upper_trigram'],
-                        result['lower_trigram'],
-                        result['hexagram']
-                    )
-                
-                save_divination_record(
-                    user_id,
-                    result['hexagram']['code'],
-                    result['hexagram']['name'],
-                    question,
-                    category,
-                    ai_interp,
-                    result['crystal']['primary']['name'] if is_premium else None
-                )
-                
-                _, remaining = can_divine(user_id)
+        # LIFF 開卦訊息 → 執行占卜
+        elif msg == '☯ 開卦':
+            # 從 pending 取得問題
+            pending = get_pending_question(user_id)
+            if not pending or not pending.get('question'):
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
-                    messages=[
-                        TextMessage(text=ritual_text),
-                        FlexMessage(
-                            alt_text=f"占卜結果：{result['hexagram']['name']}",
-                            contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
-                        )
-                    ]
+                    messages=[TextMessage(text="請先選擇問題再開卦 🙏")]
                 ))
+                return
+            
+            question = pending['question']
+            category = pending.get('category', 'general')
+            
+            # 清除 pending
+            conn = sqlite3.connect('yizhan.db')
+            c = conn.cursor()
+            c.execute('DELETE FROM pending_questions WHERE user_id = ?', (user_id,))
+            conn.commit()
+            conn.close()
+            
+            can_do, remaining = can_divine(user_id)
+            if not can_do:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[FlexMessage(alt_text="今日次數已用完", contents=FlexContainer.from_dict(create_limit_reached_flex()))]
+                ))
+                return
+            
+            # 生成六爻序列
+            yao_sequence = generate_yao_sequence(user_id, question)
+            ritual_text = format_result_ritual(question, yao_sequence)
+            
+            result = cast_yinyang_fish(user_id, question)
+            increment_daily_usage(user_id)
+            
+            ai_interp = None
+            if is_premium:
+                ai_interp = get_ai_interpretation(
+                    result['hexagram']['name'],
+                    result['hexagram']['code'],
+                    question,
+                    result['upper_trigram'],
+                    result['lower_trigram'],
+                    result['hexagram']
+                )
+            
+            save_divination_record(
+                user_id,
+                result['hexagram']['code'],
+                result['hexagram']['name'],
+                question,
+                category,
+                ai_interp,
+                result['crystal']['primary']['name'] if is_premium else None
+            )
+            
+            _, remaining = can_divine(user_id)
+            api.reply_message(ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[
+                    TextMessage(text=ritual_text),
+                    FlexMessage(
+                        alt_text=f"占卜結果：{result['hexagram']['name']}",
+                        contents=FlexContainer.from_dict(create_result_flex(result, remaining, is_premium, ai_interp, category, user_profile))
+                    )
+                ]
+            ))
         
         # 說明指令
         elif msg in ['說明', '幫助', 'help', '?', '？', '指令']:
@@ -3764,13 +3781,6 @@ def handle_message(event):
             category = pending['category']
             question = msg
             
-            # 清除 pending 狀態
-            conn = sqlite3.connect('yizhan.db')
-            c = conn.cursor()
-            c.execute('DELETE FROM pending_questions WHERE user_id = ?', (user_id,))
-            conn.commit()
-            conn.close()
-            
             can_do, remaining = can_divine(user_id)
             if not can_do:
                 api.reply_message(ReplyMessageRequest(
@@ -3779,7 +3789,10 @@ def handle_message(event):
                 ))
                 return
             
-            # 顯示儀式畫面 + 開卦按鈕（LIFF）
+            # 儲存完整問題到 pending，等待 LIFF 開卦
+            save_pending_question(user_id, question, category)
+            
+            # 顯示 LIFF 開卦按鈕
             api.reply_message(ReplyMessageRequest(
                 reply_token=event.reply_token,
                 messages=[FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))]
@@ -3845,7 +3858,10 @@ def handle_postback(event):
                     ))
                     return
                 
-                # 顯示簡潔開卦提示
+                # 儲存問題到 pending，等待 LIFF 開卦
+                save_pending_question(user_id, question, category)
+                
+                # 顯示 LIFF 開卦按鈕
                 api.reply_message(ReplyMessageRequest(
                     reply_token=event.reply_token,
                     messages=[FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))]
