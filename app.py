@@ -3521,19 +3521,32 @@ def handle_message(event):
                     messages=[FlexMessage(alt_text="請靜心後開卦", contents=FlexContainer.from_dict(create_ritual_flex(question, category)))]
                 ))
         
-        # LIFF 開卦訊息 → 執行占卜
-        elif msg == '☯ 開卦':
-            # 從 pending 取得問題
-            pending = get_pending_question(user_id)
-            if not pending or not pending.get('question'):
-                api.reply_message(ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[TextMessage(text="請先選擇問題再開卦 🙏")]
-                ))
-                return
-            
-            question = pending['question']
-            category = pending.get('category', 'general')
+        # LIFF 開卦訊息 → 執行占卜（支援新舊格式）
+        elif msg == '☯ 開卦' or msg.startswith('開卦:'):
+            # 判斷格式
+            if msg.startswith('開卦:'):
+                # 舊格式：開卦:分類:問題（電腦版）
+                parts = msg.split(':', 2)
+                if len(parts) >= 3:
+                    category = parts[1]
+                    question = parts[2]
+                else:
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="請先選擇問題再開卦 🙏")]
+                    ))
+                    return
+            else:
+                # 新格式：從 pending 取得問題
+                pending = get_pending_question(user_id)
+                if not pending or not pending.get('question') or pending.get('question') == '__WAITING__':
+                    api.reply_message(ReplyMessageRequest(
+                        reply_token=event.reply_token,
+                        messages=[TextMessage(text="請先選擇問題再開卦 🙏")]
+                    ))
+                    return
+                question = pending['question']
+                category = pending.get('category', 'general')
             
             # 清除 pending
             conn = sqlite3.connect('yizhan.db')
