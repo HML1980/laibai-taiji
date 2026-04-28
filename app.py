@@ -25,6 +25,14 @@ def get_tw_now():
 def get_tw_today():
     """取得台灣今天日期"""
     return get_tw_now().date()
+# 導入周易完整資料庫
+try:
+    from zhouyi_data import ZHOUYI_DATA, get_hexagram_context
+    ZHOUYI_AVAILABLE = True
+except ImportError:
+    ZHOUYI_AVAILABLE = False
+    print('Warning: zhouyi_data not found, using basic interpretation')
+
 from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
@@ -572,6 +580,74 @@ DAILY_HEXAGRAMS = {
 # 幸運色與方位對應
 LUCKY_COLORS = {'金': ['白色', '金色', '銀色'], '木': ['綠色', '青色', '翠綠'], '水': ['黑色', '藍色', '深藍'], '火': ['紅色', '紫色', '橙色'], '土': ['黃色', '棕色', '咖啡色']}
 LUCKY_DIRECTIONS = {'金': '西方', '木': '東方', '水': '北方', '火': '南方', '土': '中央'}
+
+# 六十四卦經典解釋（黃澤元白話簡釋）
+HEXAGRAM_CLASSIC = {
+    '乾為天': {'meaning': '飛龍在天空', 'element': '金', 'description': '乾卦暗示剛健旺盛之運動，如飛龍在天空飛舞。運勢最強，但升得太高，到了極點，提防下降失敗之可能。「亢龍有悔」，教人雖然很好，但更要謙虛，以免太滿驕傲，遭到小人損害。'},
+    '坤為地': {'meaning': '柔順的大地', 'element': '土', 'description': '坤卦象徵平靜、和順與包容，也是消極與被動。大地之母孕育著萬物的生長與希望。宜配合他人，穩紮穩打。'},
+    '水雷屯': {'meaning': '新生的嫩芽', 'element': '水', 'description': '萬物之始也。陰雲密佈的天空中，閃電震動，不久將下雨，草木會長出嫩芽。相當於人的嬰兒期，比喻開始創建，宜穩健前進，不宜急躁。'},
+    '山水蒙': {'meaning': '矇朧的山谷', 'element': '土', 'description': '水氣蒸發後變成霧，把山遮蓋成朦朧狀，看不清真面目。代表幼兒智能啟蒙之時，雖蒙昧無知，但終將被開導啟蒙而聰明起來。宜小心判斷，虛心學習。'},
+    '水天需': {'meaning': '等待及時雨到來', 'element': '水', 'description': '密雲滿天而未雨，萬人仰望等待下雨之象。等待是智慧，時機未到，養精蓄銳，機會自來。宜耐心等待，蓄勢待發。'},
+    '天水訟': {'meaning': '打官司口舌是非多', 'element': '金', 'description': '公言於公庭，即打官司。雖然你堅持論點正確，但對方也認為他才對，對立愈來愈激烈。殺人一萬自損三千，冤家宜解不宜結，和解乃為上上之策。'},
+    '地水師': {'meaning': '出師平萬難', 'element': '土', 'description': '軍旅軍隊之意。不肖之歹徒得勢在上，賢能者委屈在下，世局動亂不安，必須出師以平亂。宜統籌規劃，凝聚人心。'},
+    '水地比': {'meaning': '上下比和相處', 'element': '水', 'description': '比是親密的意思。水覆蓋在地面上，浸入土壤中，相互親近而融合為一體。天子愛護百姓，百姓擁護天子的吉象。宜廣結善緣，真誠待人。'},
+    '風天小畜': {'meaning': '以小而蓄大', 'element': '木', 'description': '一陰統蓄五陽，以小蓄大。風在天上吹，西天湧起密雲，但尚未形成造雨的形勢。欲雨而未雨，心情壓抑無法發洩。宜積少成多，穩紮穩打。'},
+    '天澤履': {'meaning': '小心踏到虎尾巴', 'element': '金', 'description': '踩到老虎尾巴的危險。縱然碰到來勢凶凶的人，只要用忍辱柔和謙遜的態度對待，對方也不至於傷害你。以柔克剛，仍能得到平安。宜謹慎小心，步步為營。'},
+    '地天泰': {'meaning': '天地交泰', 'element': '土', 'description': '天氣下降，地氣上升，為通泰之象。上司部下、丈夫妻子融洽相合，君子居內被重用，小人被摒退在外，國家太平安泰。宜把握時機，大展宏圖。'},
+    '天地否': {'meaning': '否塞不通順', 'element': '金', 'description': '閉塞不通。陰陽二氣相隔絕而不暢通。君子被排斥在外，小人得勢氣盛，正道不能成而天下大亂。宜沉潛蓄力，等待轉機。'},
+    '天火同人': {'meaning': '同心努力向上', 'element': '金', 'description': '天在上，火勢向上燃燒，人心也愛好上進。同人有相互親近的意思，志同道合，眾人齊心。宜廣結盟友，團隊合作。'},
+    '火天大有': {'meaning': '盛大而富有', 'element': '火', 'description': '天上有太陽普照萬物。離卦表示夏天萬物旺盛，乾卦代表秋天成熟收成。上下兩卦都有豐盛富有的意思。宜感恩惜福，回饋社會。'},
+    '地山謙': {'meaning': '要學習謙虛', 'element': '土', 'description': '具有山那麼高的本事，而能謙虛屈居於地之下，可見其肚量。地位愈高愈富有的人愈要謙虛，一如成熟的稻穗愈會把頭兒低垂下來。宜謙虛為懷，功成不居。'},
+    '雷地豫': {'meaning': '豫樂的春雷來臨', 'element': '木', 'description': '雷出地面，陽氣散發，萬物欣欣向榮。豫有準備、悅樂、懈逸三種意思，以悅樂為主。宜放鬆心情，適度享樂。'},
+    '澤雷隨': {'meaning': '跟隨別人的好意見', 'element': '金', 'description': '以剛下柔，委屈自己跟隨別人，如一個壯漢服服貼貼地跟隨在年輕的少女之後。宜順勢而為，隨機應變。'},
+    '山風蠱': {'meaning': '提防腐敗生蛆蟲', 'element': '土', 'description': '器皿中的食物腐敗生蟲。剛爻橫阻於上，柔爻受阻在下動彈不得，如器皿廢置不用，難免日久壞掉。山下有風則草木零亂，是敗壞現象。宜革除積弊，重新振作。'},
+    '地澤臨': {'meaning': '要居高臨下監督', 'element': '土', 'description': '居高臨下，有監督之意。在下的人高興把意見向上反應，在上者順乎部屬意見而給與恩澤，相得益彰。宜關懷下屬，廣聽民意。'},
+    '風地觀': {'meaning': '觀望與期待', 'element': '木', 'description': '觀有觀瞻或示範的意思，就是由下往上仰瞻之意。宜觀察形勢，審時度勢。'},
+    '火雷噬嗑': {'meaning': '上齒咬下齒', 'element': '火', 'description': '口齒咬合的意思。第四爻橫貫上下齒之間，必須把他咬斷，張開的口方能合攏。宜果斷處理，排除障礙。'},
+    '山火賁': {'meaning': '外表漂亮的夕陽山', 'element': '土', 'description': '山下有火，是裝飾或彩色的意思。雖然外表美麗，實際內容不配合也沒意義。本卦只有短暫、外表之美。宜注重內涵，不可虛有其表。'},
+    '山地剝': {'meaning': '漸漸剝蝕的山', 'element': '土', 'description': '剝削耗蝕之意。只有一個陽爻，其餘五個陰爻逐漸向下裂開，好像下雨時山上的土壤被雨沖下逐漸成為平地。宜守成，不宜擴張。'},
+    '地雷復': {'meaning': '生機回復了', 'element': '土', 'description': '循環往復之意。一陽在下逐漸往上升，陽氣復甦，萬物得到生機。地下有雷，春雷將響，溫暖回復到地上，迎接初春的來臨。宜重新出發，把握新機。'},
+    '天雷無妄': {'meaning': '順其自然天道', 'element': '金', 'description': '無妄就是真實至誠的意思。乾代表天，震代表動，加起來就是天道運行的現象。宜順乎自然而非人為勉強，提防意外之災，勿多管閒事。'},
+    '山天大畜': {'meaning': '大的蓄滿', 'element': '土', 'description': '畜有蓄聚、蓄養、蓄止的意思，豐收倉庫裡堆滿穀物。以陽蓄陽，愈來愈大的現象。宜積蓄實力，厚積薄發。'},
+    '山雷頤': {'meaning': '宜頤養時機', 'element': '土', 'description': '頤就是下顎的意思，也有頤養的意思。卦形像口齒，上下爻為唇，中間為牙齒。宜注重養生，調養身心。'},
+    '澤風大過': {'meaning': '負擔太大而過重', 'element': '金', 'description': '太大而過分的意思。水太多把樹木淹沒了，失去滋潤的好處，反而會讓樹木萎死。宜量力而為，不可貪多。'},
+    '坎為水': {'meaning': '危險的漩渦', 'element': '水', 'description': '坎坷，艱難危險的意思。上下皆水，水量過多，容易滅頂危險。這是四大難卦之一。宜謹慎小心，避開危險。'},
+    '離為火': {'meaning': '陽光普照大地', 'element': '火', 'description': '離字作光明解，又與麗字通用，解釋作附著的意思。光明普照，萬物附麗。宜發揮才華，展現光芒。'},
+    '澤山咸': {'meaning': '要心電感應', 'element': '金', 'description': '咸與感同義，心與心的接觸，心靈感應，最後合而為一。少年與少女彼此互相感應，得到喜悅，心滿意足的停留下來。宜用心感受，真誠交流。'},
+    '雷風恆': {'meaning': '恆久不變', 'element': '木', 'description': '恆是經常、長久的意思。雷在上向外發展，風在下向內發展，各居本位，各循常軌，由來如此，永恆也是如此。宜堅持不懈，持之以恆。'},
+    '天山遯': {'meaning': '宜遯隱謙虛', 'element': '金', 'description': '遯有逃避與退隱的意思。山很高想接近天，而天卻又更高更躲得遠了。老父退休少年繼承，或小人得勢君子退隱的現象。宜暫時退避，保全實力。'},
+    '雷天大壯': {'meaning': '壯大的衝勁', 'element': '木', 'description': '大壯就是陽性特別強的意思。雷聲隆隆在天大響，勢不可擋。宜積極進取，但不可過於衝動。'},
+    '火地晉': {'meaning': '曙光帶來新希望', 'element': '火', 'description': '晉是太陽出現，萬物生長前進的意思。太陽出現在地面上，大放光明，萬物得到進展的好機會。宜積極向前，把握機會。'},
+    '地火明夷': {'meaning': '太陽落地上', 'element': '土', 'description': '夷作傷害與誅滅的意思，明夷就是太陽掉在地下，陷於黑暗。君子離開官位，浪跡江湖。火性向上燒卻落在地下，呈現黑暗的狀態。宜韜光養晦，靜待時機。'},
+    '風火家人': {'meaning': '欣欣向榮一家人', 'element': '木', 'description': '丈夫在外工作，妻子在內照顧家庭，陰陽呼應，家道欣欣向榮。宜注重家庭，和諧相處。'},
+    '火澤睽': {'meaning': '睽違不合的人', 'element': '火', 'description': '睽有乖違，二者不相容，背道而馳的意思。火往上燒，水向下流，兩者性質相反而不相容。宜求同存異，化解分歧。'},
+    '水山蹇': {'meaning': '困頓跛足走路', 'element': '水', 'description': '蹇是跛的意思。坎陷當前，止而不進，好像跛足的人走路困難。這是四大難卦之一。宜審時度勢，穩健前行。'},
+    '雷水解': {'meaning': '春冰溶解', 'element': '木', 'description': '雷雨交作，悶熱天氣解散。冬去春來，寒氣解除，春雨降臨，大地暖和，冰雪解凍，萬物欣欣向榮。宜把握時機，解決問題。'},
+    '山澤損': {'meaning': '先損失才能得到', 'element': '土', 'description': '損字意義為減損。先損失沼澤的土壤來增加山的高度，山高水深，各得好處。雖是先損失，最後還是有獲得。宜有所取捨，先苦後甜。'},
+    '風雷益': {'meaning': '利益增加', 'element': '木', 'description': '益字為增加的意思。強風加疾雷，兩者相互助威聲勢的現象。宜把握機會，積極進取。'},
+    '澤天夬': {'meaning': '宜果斷排除困難', 'element': '金', 'description': '夬就是去除的意思，含有果斷勇敢的意思。五個君子想排除一個小人，都有去除的意思。宜當機立斷，排除障礙。'},
+    '天風姤': {'meaning': '小心桃花問題', 'element': '金', 'description': '姤原來是男女相交，也可解釋為一般的遭遇。風力吹行天空中，凡是暴露在空間的物體都會跟風碰頭。宜謹慎交友，提防是非。'},
+    '澤地萃': {'meaning': '熱鬧的祭典', 'element': '金', 'description': '萃作叢聚的意思，如人才薈萃，就是人才眾多而集中。澤在地之上，水能潤土，滋長草木，繁殖茂盛。宜團結眾人，集思廣益。'},
+    '地風升': {'meaning': '新芽上升', 'element': '土', 'description': '升就是樹木從地裡向上生長，也就是上進的意思。風從地下升出地面上。宜積極向上，穩步提升。'},
+    '澤水困': {'meaning': '被困難困住', 'element': '金', 'description': '困就是受困的意思。兌澤之水注入坎陷之中洩掉了，沼澤的水被坎陷所困住了。這是四大難卦之一。宜堅忍不拔，等待轉機。'},
+    '水風井': {'meaning': '期待一口解渴井', 'element': '水', 'description': '木製的容器放進井中用來汲出井水的意思。巽卦代表進入，坎卦代表陷落，合起來就是地面凹陷形成了井。宜深掘內涵，滋養萬物。'},
+    '澤火革': {'meaning': '該改革的時候', 'element': '金', 'description': '革本來是皮，後來轉變為改革或變革的意義。水能滅火，火也能燒乾水分，有相互改變的現象。夏天草木欣欣向榮，秋天草木凋落，氣候變革很明顯。宜順應變化，勇於革新。'},
+    '火風鼎': {'meaning': '三腳鼎立', 'element': '火', 'description': '鼎是古代烹煮器，有三隻腳。下卦巽為木，上卦離為火，有燒柴煮食的現象。卦形也像鼎。宜穩固根基，鼎新革故。'},
+    '震為雷': {'meaning': '雷動震千里', 'element': '木', 'description': '震字為動盪激發的意義。陰爻壓力愈大，陽爻抗力愈強，勢必發憤圖強，有雷霆萬鈞之象。宜奮發進取，把握機會。'},
+    '艮為山': {'meaning': '如山靜止不動', 'element': '土', 'description': '艮就是停留或阻止的意思。上下卦都是山，層層阻擋，當然不能再前進了。一陽進到最頂點，無可再進，不進則止。宜靜待時機，穩紮穩打。'},
+    '風山漸': {'meaning': '樹木漸漸長大', 'element': '木', 'description': '漸就是按照順序漸進的意思。巽木在艮山上，山勢由漸而高，樹木由漸而長，都具有漸進的意思。宜循序漸進，步步為營。'},
+    '雷澤歸妹': {'meaning': '小妹先出嫁', 'element': '木', 'description': '歸妹就是妹妹比姊姊先嫁人的意思。未成年的少女跟隨大漢而得到喜悅。這是不尋常的婚嫁。宜審慎抉擇，順其自然。'},
+    '雷火豐': {'meaning': '豐盛滿足', 'element': '木', 'description': '豐有大及多的意義，就是豐盛富有的意思。雷電交作，聲勢壯大。宜把握時機，擴大成果。'},
+    '火山旅': {'meaning': '心煩如火的旅客', 'element': '火', 'description': '旅有過往和暫寄的意義，就是旅行的意思。火勢燃燒蔓延不停留，好像旅行的人；山岳屹立不移，好像讓旅居住的旅社。宜隨遇而安，靈活應變。'},
+    '巽為風': {'meaning': '順從的風', 'element': '木', 'description': '巽作順伏與容人解釋，進入與順從，就是順從服貼的意思。陰爻潛伏在兩陽爻之下順從而退下出來，委曲順從。宜順勢而為，靈活變通。'},
+    '兌為澤': {'meaning': '喜悅的少女', 'element': '金', 'description': '兌者悅也，喜悅的意思。柔弱卑賤的陰爻被捧在兩個尊貴的陽爻之上，高高在上當然很喜悅。宜保持樂觀，分享喜悅。'},
+    '風水渙': {'meaning': '風吹水渙散', 'element': '木', 'description': '渙字為換散、散開的意思。風吹水面，水波渙散。宜打破僵局，化解困境。'},
+    '水澤節': {'meaning': '做事宜節制', 'element': '水', 'description': '節字為有限度的意思，也就是操守節度。兌澤在坎水之下，容蓄水量，不讓水流四散奔流。宜量入為出，節制有度。'},
+    '風澤中孚': {'meaning': '信孚的風在水面', 'element': '木', 'description': '孚是信實、誠懇的意思。風在水澤上，水面空曠無阻，佈滿風力，為空間的充實現象。中心信而有實。宜誠信待人，言而有信。'},
+    '雷山小過': {'meaning': '提防小人過多', 'element': '木', 'description': '小過就是小者過多的意思。陰性的小超過了陽性的大。宜小心謹慎，不可輕舉妄動。'},
+    '水火既濟': {'meaning': '得到濟助可成功', 'element': '水', 'description': '既濟是凡事得到濟助而有所成就的意思。坎水在離火之上，水性下注，火勢向上，水火相交，可成烹飪的功用。宜保持謹慎，居安思危。'},
+    '火水未濟': {'meaning': '尚未得到濟助', 'element': '火', 'description': '未濟與既濟的意思正好相反，就是尚未得到濟助而無法有成。火在上水在下，水火不得其所，無從發揮功用，不能相互濟助。宜堅持努力，善始善終。'},
+}
 
 def calculate_daily_hexagram(user_id, today=None):
     """梅花易數計算每日卦象"""
@@ -1556,11 +1632,49 @@ HEXAGRAM_MEANINGS = {
 # ============================================================
 # AI 深度解讀（VIP）
 # ============================================================
-def get_ai_interpretation(hexagram_name, hexagram_code, question, upper, lower, meaning):
+def get_ai_interpretation(hexagram_name, hexagram_code, question, upper, lower, meaning, category=None, yao=None):
+    """
+    AI 深度解讀卦象
+    
+    Args:
+        hexagram_name: 卦名
+        hexagram_code: 卦號 (1-64)
+        question: 用戶問題
+        upper/lower: 上下卦資訊
+        meaning: 卦意
+        category: 問題類型 ('career'/'love'/'wealth' 等)
+        yao: 動爻
+    """
     if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
         return None
     try:
         client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        
+        # 取得經典解釋
+        classic = HEXAGRAM_CLASSIC.get(hexagram_name, {})
+        classic_meaning = classic.get('meaning', '')
+        classic_desc = classic.get('description', '')
+        classic_element = classic.get('element', '')
+        
+        # 取得周易完整資料（新增）
+        zhouyi_context = ""
+        if ZHOUYI_AVAILABLE and hexagram_code:
+            try:
+                gua_num = int(hexagram_code)
+                # 根據問題自動判斷類型
+                if not category and question:
+                    if any(kw in question for kw in ['工作', '事業', '職場', '升遷', '面試', '老闆', '同事']):
+                        category = 'career'
+                    elif any(kw in question for kw in ['感情', '愛情', '戀愛', '婚姻', '對象', '分手', '復合', '曖昧']):
+                        category = 'love'
+                    elif any(kw in question for kw in ['財運', '投資', '股票', '賺錢', '理財', '買賣']):
+                        category = 'wealth'
+                    elif any(kw in question for kw in ['選擇', '決定', '該不該', '要不要', '如何']):
+                        category = 'decision'
+                
+                zhouyi_context = get_hexagram_context(gua_num, category, yao)
+            except:
+                pass
         
         # 根據問題內容調整提示
         question_context = ""
@@ -1598,27 +1712,38 @@ def get_ai_interpretation(hexagram_name, hexagram_code, question, upper, lower, 
 - 如果問「會不會成功」→ 分析成功的可能性和需要的條件
 - 如果問「何時」→ 根據卦象給出時機建議"""
 
+        # 構建提示詞（整合周易資料）
         prompt = f"""你是精通易經的資深命理師「籟柏老師」。
 
 【卦象資訊】
 卦名：{hexagram_name}（第 {hexagram_code} 卦）
-卦運：{meaning['aspect']}
+卦象本義：{classic_meaning}
+五行屬性：{classic_element}
 上卦：{upper['name']}（{upper['nature']}，五行屬{upper['element']}）
 下卦：{lower['name']}（{lower['nature']}，五行屬{lower['element']}）
+
+【經典釋義】
+{classic_desc}
+
+【周易深度解讀】
+{zhouyi_context if zhouyi_context else '（無額外資料）'}
+
+【現代應用】
+卦運：{meaning['aspect']}
 卦意：{meaning['story']}
 {question_context}
 
 【回答要求】
 1. 開頭先直接回應用戶的問題（一句話給出方向）
-2. 再用卦象解釋為什麼這樣建議
+2. 結合經典釋義和周易解讀解釋為什麼這樣建議
 3. 給出具體可行的建議
 4. 結尾一句開運箴言
 
-語氣溫暖專業，像智慧長輩給予指引。180字以內。"""
+語氣溫暖專業，像智慧長輩給予指引。220字以內。"""
 
         msg = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=400,
+            max_tokens=550,
             messages=[{"role": "user", "content": prompt}]
         )
         return msg.content[0].text
@@ -1836,16 +1961,34 @@ def create_result_flex(result, remaining, is_premium=False, ai_interp=None, cate
     })
     
     # 卦意簡述
+    hexagram_name = result['hexagram']['name']
+    classic = HEXAGRAM_CLASSIC.get(hexagram_name, {})
+    classic_meaning = classic.get('meaning', '')
+    classic_desc = classic.get('description', '')
+    
     body_contents.append({
         "type": "box",
         "layout": "vertical",
         "margin": "xl",
         "contents": [
-            {"type": "text", "text": f"「{result['hexagram']['brief']}」", "size": "lg", "weight": "bold", "align": "center", "color": "#1a1a2e"}
+            {"type": "text", "text": f"「{classic_meaning or result['hexagram']['brief']}」", "size": "lg", "weight": "bold", "align": "center", "color": "#1a1a2e"}
         ]
     })
     
     body_contents.append({"type": "separator", "margin": "xl"})
+    
+    # 經典釋義
+    if classic_desc:
+        body_contents.append({
+            "type": "box",
+            "layout": "vertical",
+            "margin": "xl",
+            "contents": [
+                {"type": "text", "text": "📜 經典釋義", "size": "md", "weight": "bold", "color": "#1a1a2e"},
+                {"type": "text", "text": classic_desc, "size": "sm", "wrap": True, "margin": "md", "color": "#333333", "lineSpacing": "5px"}
+            ]
+        })
+        body_contents.append({"type": "separator", "margin": "xl"})
     
     # 卦象故事
     body_contents.append({
