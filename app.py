@@ -731,30 +731,112 @@ def get_daily_fortune(user_id, user_profile=None):
     }
 
 # ============================================================
-# 水晶推薦系統（VIP 專屬）
 # ============================================================
+# 水晶推薦系統 v2（按問題類型 + 卦運雙重推薦）
+# ============================================================
+
+# 按問題類型推薦
+CRYSTAL_BY_CATEGORY = {
+    '感情': {
+        'primary': {'name': '紅伊丁', 'color': '#CD5C5C', 'benefit': '激發熱情，吸引正緣', 'usage': '約會時隨身佩戴'},
+        'secondary': {'name': '藍水翡翠', 'color': '#5F9EA0', 'benefit': '促進溝通，感情和諧', 'usage': '與伴侶相處時佩戴'}
+    },
+    '事業': {
+        'primary': {'name': '綠髮晶', 'color': '#228B22', 'benefit': '招貴人，事業順遂', 'usage': '重要會議時佩戴'},
+        'secondary': {'name': '黃水晶', 'color': '#FFD700', 'benefit': '增強自信，把握機會', 'usage': '放辦公桌或隨身攜帶'}
+    },
+    '考試': {
+        'primary': {'name': '螢石', 'color': '#9370DB', 'benefit': '增強記憶，思緒清晰', 'usage': '讀書考試時隨身攜帶'},
+        'secondary': {'name': '白水晶', 'color': '#F5F5F5', 'benefit': '淨化思緒，提升專注', 'usage': '放書桌上'}
+    },
+    '財運': {
+        'primary': {'name': '綠幽靈', 'color': '#90EE90', 'benefit': '招正財，事業財運亨通', 'usage': '放財位或收銀台'},
+        'secondary': {'name': '蜜蠟', 'color': '#FFB347', 'benefit': '招財納福，穩定財源', 'usage': '隨身佩戴招財'}
+    },
+    '健康': {
+        'primary': {'name': '鈦赫茲', 'color': '#708090', 'benefit': '促進循環，增強能量', 'usage': '長期佩戴調理身體'},
+        'secondary': {'name': '綠龍晶', 'color': '#2E8B57', 'benefit': '療癒身心，穩定情緒', 'usage': '放床頭或隨身'}
+    },
+    '人際': {
+        'primary': {'name': '藍碧璽', 'color': '#4169E1', 'benefit': '增強溝通，化解誤會', 'usage': '社交場合佩戴'},
+        'secondary': {'name': '藍水翡翠', 'color': '#5F9EA0', 'benefit': '平靜心靈，人際和諧', 'usage': '與人溝通時佩戴'}
+    },
+    '抉擇': {
+        'primary': {'name': '赤鐵礦', 'color': '#696969', 'benefit': '接地穩定，增強意志', 'usage': '重大決定前握在手中'},
+        'secondary': {'name': '閃靈鑽', 'color': '#E8E8E8', 'benefit': '淨化思緒，看清方向', 'usage': '冥想時使用'}
+    },
+    '綜合': {
+        'primary': {'name': '白水晶', 'color': '#F5F5F5', 'benefit': '萬能水晶，淨化提升', 'usage': '適合任何情況'},
+        'secondary': {'name': '孔雀石', 'color': '#3CB371', 'benefit': '療癒保護，轉化能量', 'usage': '日常佩戴皆宜'}
+    }
+}
+
+# 按卦運吉凶推薦
 CRYSTAL_RECOMMENDATIONS = {
     '大吉': {
         'primary': {'name': '黃水晶', 'color': '#FFD700', 'benefit': '招財旺運，放大正能量', 'usage': '建議放在財位或隨身攜帶'},
-        'secondary': {'name': '金髮晶', 'color': '#DAA520', 'benefit': '增強領導力，把握機遇', 'usage': '適合重要決策時佩戴'}
+        'secondary': {'name': '蜜蠟', 'color': '#FFB347', 'benefit': '招財納福，好運連連', 'usage': '適合重要場合佩戴'}
     },
     '吉': {
         'primary': {'name': '綠幽靈', 'color': '#90EE90', 'benefit': '事業穩健，貴人相助', 'usage': '適合放在辦公桌'},
-        'secondary': {'name': '綠東陵', 'color': '#3CB371', 'benefit': '帶來好運，穩定情緒', 'usage': '隨身攜帶增強運勢'}
+        'secondary': {'name': '綠髮晶', 'color': '#228B22', 'benefit': '招貴人，把握機遇', 'usage': '隨身攜帶增強運勢'}
     },
     '平': {
         'primary': {'name': '白水晶', 'color': '#F5F5F5', 'benefit': '淨化磁場，提升智慧', 'usage': '適合冥想或放在書房'},
-        'secondary': {'name': '月光石', 'color': '#E6E6FA', 'benefit': '增強直覺，平衡情緒', 'usage': '夜間效果更佳'}
+        'secondary': {'name': '硨磲', 'color': '#FFFAF0', 'benefit': '安神淨化，消災護身', 'usage': '隨身佩戴保平安'}
     },
     '小心': {
-        'primary': {'name': '紫水晶', 'color': '#9370DB', 'benefit': '安定心神，增強判斷力', 'usage': '放枕邊助眠並帶來清明'},
-        'secondary': {'name': '螢石', 'color': '#7B68EE', 'benefit': '思緒清晰，化解困惑', 'usage': '工作學習時放桌上'}
+        'primary': {'name': '蟲蝕沉香', 'color': '#8B4513', 'benefit': '安神靜心，化解煩憂', 'usage': '放床頭助眠或隨身'},
+        'secondary': {'name': '黑瑪瑙', 'color': '#1C1C1C', 'benefit': '穩定情緒，消除負能量', 'usage': '隨身佩戴保護'}
     },
     '凶': {
         'primary': {'name': '黑曜石', 'color': '#1a1a1a', 'benefit': '強力避邪，化解負能量', 'usage': '佩戴左手或放門口'},
-        'secondary': {'name': '黑碧璽', 'color': '#2F2F2F', 'benefit': '防護磁場，阻擋小人', 'usage': '放辦公室四角或隨身'}
+        'secondary': {'name': '硃砂', 'color': '#DC143C', 'benefit': '鎮宅辟邪，轉危為安', 'usage': '隨身攜帶或放床頭櫃'}
     }
 }
+
+# 問題類型關鍵字對應
+CATEGORY_KEYWORDS = {
+    '感情': ['感情', '愛情', '戀愛', '婚姻', '對象', '分手', '復合', '曖昧', '桃花', '另一半', '男友', '女友', '老公', '老婆', '喜歡'],
+    '事業': ['工作', '事業', '職場', '升遷', '面試', '老闆', '同事', '轉職', '創業', '公司', '職業'],
+    '考試': ['考試', '學業', '讀書', '升學', '證照', '考研', '國考', '測驗', '成績'],
+    '財運': ['財運', '投資', '股票', '賺錢', '理財', '買賣', '彩券', '財務', '收入', '薪水'],
+    '健康': ['健康', '身體', '生病', '手術', '治療', '醫院', '看醫生', '康復', '養生'],
+    '人際': ['人際', '朋友', '社交', '相處', '同學', '鄰居', '家人', '親戚', '貴人'],
+    '抉擇': ['選擇', '決定', '該不該', '要不要', '如何', '怎麼辦', '糾結', '抉擇', '兩難']
+}
+
+def get_category_from_question(question):
+    """根據問題內容判斷類型"""
+    if not question:
+        return '綜合'
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        if any(kw in question for kw in keywords):
+            return category
+    return '綜合'
+
+def get_crystal_recommendation(aspect, question=None, category=None):
+    """
+    獲取水晶推薦（優先按問題類型，再按卦運）
+    
+    Args:
+        aspect: 卦運 ('大吉'/'吉'/'平'/'小心'/'凶')
+        question: 用戶問題
+        category: 問題類型（可選，若無則自動判斷）
+    
+    Returns:
+        crystal dict with 'primary' and 'secondary'
+    """
+    # 判斷問題類型
+    if not category and question:
+        category = get_category_from_question(question)
+    
+    # 優先按問題類型推薦
+    if category and category in CRYSTAL_BY_CATEGORY:
+        return CRYSTAL_BY_CATEGORY[category]
+    
+    # 其次按卦運推薦
+    return CRYSTAL_RECOMMENDATIONS.get(aspect, CRYSTAL_RECOMMENDATIONS['平'])
 
 # ============================================================
 # 資料庫
@@ -1861,7 +1943,7 @@ def cast_yinyang_fish(user_id=None, question=None):
         'advice': '順其自然，隨遇而安。'
     })
     
-    crystal = CRYSTAL_RECOMMENDATIONS.get(meaning['aspect'], CRYSTAL_RECOMMENDATIONS['平'])
+    crystal = get_crystal_recommendation(meaning['aspect'], question)
     
     return {
         'fish1': {
