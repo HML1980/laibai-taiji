@@ -1113,6 +1113,75 @@ HEXAGRAM_NAMES = {
     '81': '地天泰', '82': '地澤臨', '83': '地火明夷', '84': '地雷復', '85': '地風升', '86': '地水師', '87': '地山謙', '88': '坤為地'
 }
 
+# 周易六十四卦傳統順序（內部編碼 → 周易卦序）
+HEXAGRAM_ORDER = {
+    '11': 1,   # 乾為天
+    '88': 2,   # 坤為地
+    '64': 3,   # 水雷屯
+    '76': 4,   # 山水蒙
+    '61': 5,   # 水天需
+    '16': 6,   # 天水訟
+    '86': 7,   # 地水師
+    '68': 8,   # 水地比
+    '51': 9,   # 風天小畜
+    '12': 10,  # 天澤履
+    '81': 11,  # 地天泰
+    '18': 12,  # 天地否
+    '13': 13,  # 天火同人
+    '31': 14,  # 火天大有
+    '87': 15,  # 地山謙
+    '48': 16,  # 雷地豫
+    '24': 17,  # 澤雷隨
+    '75': 18,  # 山風蠱
+    '82': 19,  # 地澤臨
+    '58': 20,  # 風地觀
+    '34': 21,  # 火雷噬嗑
+    '73': 22,  # 山火賁
+    '78': 23,  # 山地剝
+    '84': 24,  # 地雷復
+    '14': 25,  # 天雷無妄
+    '71': 26,  # 山天大畜
+    '74': 27,  # 山雷頤
+    '25': 28,  # 澤風大過
+    '66': 29,  # 坎為水
+    '33': 30,  # 離為火
+    '27': 31,  # 澤山咸
+    '45': 32,  # 雷風恆
+    '17': 33,  # 天山遯
+    '41': 34,  # 雷天大壯
+    '38': 35,  # 火地晉
+    '83': 36,  # 地火明夷
+    '53': 37,  # 風火家人
+    '32': 38,  # 火澤睽
+    '67': 39,  # 水山蹇
+    '46': 40,  # 雷水解
+    '72': 41,  # 山澤損
+    '54': 42,  # 風雷益
+    '21': 43,  # 澤天夬
+    '15': 44,  # 天風姤
+    '28': 45,  # 澤地萃
+    '85': 46,  # 地風升
+    '26': 47,  # 澤水困
+    '65': 48,  # 水風井
+    '23': 49,  # 澤火革
+    '35': 50,  # 火風鼎
+    '44': 51,  # 震為雷
+    '77': 52,  # 艮為山
+    '57': 53,  # 風山漸
+    '42': 54,  # 雷澤歸妹
+    '43': 55,  # 雷火豐
+    '37': 56,  # 火山旅
+    '55': 57,  # 巽為風
+    '22': 58,  # 兌為澤
+    '56': 59,  # 風水渙
+    '62': 60,  # 水澤節
+    '52': 61,  # 風澤中孚
+    '47': 62,  # 雷山小過
+    '63': 63,  # 水火既濟
+    '36': 64,  # 火水未濟
+}
+
+
 # 豐富的卦象解讀 - 包含故事性描述、運勢預測、引導升級的懸念
 HEXAGRAM_MEANINGS = {
     '11': {
@@ -1924,7 +1993,7 @@ def create_result_flex(result, remaining, is_premium=False, ai_interp=None, cate
         "backgroundColor": aspect_bg,
         "cornerRadius": "12px",
         "contents": [
-            {"type": "text", "text": f"第 {result['hexagram']['code']} 卦", "size": "xs", "color": "#888888", "align": "center"},
+            {"type": "text", "text": f"第 {HEXAGRAM_ORDER.get(result['hexagram']['code'], result['hexagram']['code'])} 卦", "size": "xs", "color": "#888888", "align": "center"},
             {"type": "text", "text": result['hexagram']['name'], "size": "xxl", "weight": "bold", "align": "center", "color": "#1a1a2e", "margin": "sm"},
             {
                 "type": "box",
@@ -3717,7 +3786,7 @@ def handle_message(event):
             if is_premium:
                 ai_interp = get_ai_interpretation(
                     result['hexagram']['name'],
-                    result['hexagram']['code'],
+                    HEXAGRAM_ORDER.get(result['hexagram']['code'], result['hexagram']['code']),
                     question,
                     result['upper_trigram'],
                     result['lower_trigram'],
@@ -3726,7 +3795,7 @@ def handle_message(event):
             
             save_divination_record(
                 user_id,
-                result['hexagram']['code'],
+                HEXAGRAM_ORDER.get(result['hexagram']['code'], result['hexagram']['code']),
                 result['hexagram']['name'],
                 question,
                 category,
@@ -4050,7 +4119,7 @@ def handle_postback(event):
                 if is_premium:
                     ai_interp = get_ai_interpretation(
                         result['hexagram']['name'],
-                        result['hexagram']['code'],
+                        HEXAGRAM_ORDER.get(result['hexagram']['code'], result['hexagram']['code']),
                         question,
                         result['upper_trigram'],
                         result['lower_trigram'],
@@ -4059,7 +4128,7 @@ def handle_postback(event):
                 
                 save_divination_record(
                     user_id,
-                    result['hexagram']['code'],
+                    HEXAGRAM_ORDER.get(result['hexagram']['code'], result['hexagram']['code']),
                     result['hexagram']['name'],
                     question,
                     category,
