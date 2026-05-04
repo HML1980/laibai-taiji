@@ -732,78 +732,260 @@ def get_daily_fortune(user_id, user_profile=None):
 
 # ============================================================
 # ============================================================
-# 水晶推薦系統 v2（按問題類型 + 卦運雙重推薦）
+# 水晶推薦系統 v3（親切口語版 + 詳細說明）
 # ============================================================
 
 # 按問題類型推薦
 CRYSTAL_BY_CATEGORY = {
     '感情': {
-        'primary': {'name': '紅伊丁', 'color': '#CD5C5C', 'benefit': '激發熱情，吸引正緣', 'usage': '約會時隨身佩戴'},
-        'secondary': {'name': '藍水翡翠', 'color': '#5F9EA0', 'benefit': '促進溝通，感情和諧', 'usage': '與伴侶相處時佩戴'}
+        'primary': {
+            'name': '粉水晶',
+            'color': '#FFB6C1',
+            'benefit': '招桃花、增進感情，讓你散發溫柔魅力～',
+            'placement': '放床頭櫃或梳妝台，每天起床、睡前都看得到，讓粉嫩能量默默幫你招桃花。單身的話，放房間西南方（桃花位）更加分！',
+            'wearing': '戴左手吸引好緣分，約會的時候一定要記得戴！',
+            'alternative': '草莓晶、紅紋石'
+        },
+        'secondary': {
+            'name': '草莓晶',
+            'color': '#FF69B4',
+            'benefit': '增強魅力，讓對的人注意到你！',
+            'placement': '隨身攜帶就好，放包包裡也可以，讓它的能量跟著你走。',
+            'wearing': '戴左手，特別適合約會、聯誼的時候戴，桃花朵朵開～',
+            'alternative': '粉水晶、紅紋石'
+        }
     },
     '事業': {
-        'primary': {'name': '綠髮晶', 'color': '#228B22', 'benefit': '招貴人，事業順遂', 'usage': '重要會議時佩戴'},
-        'secondary': {'name': '黃水晶', 'color': '#FFD700', 'benefit': '增強自信，把握機會', 'usage': '放辦公桌或隨身攜帶'}
+        'primary': {
+            'name': '鈦晶',
+            'color': '#DAA520',
+            'benefit': '招財旺運，讓你氣場強大、貴人自動靠過來！',
+            'placement': '放在辦公桌左前方（貴人位），保持桌面乾淨，一抬頭就能看到它～別被文件蓋住囉！',
+            'wearing': '戴左手接收財富能量，重要會議、談生意的時候記得戴著！',
+            'alternative': '虎眼石、茶晶'
+        },
+        'secondary': {
+            'name': '綠髮晶',
+            'color': '#228B22',
+            'benefit': '招貴人，讓事業有人幫、有人挺！',
+            'placement': '放辦公桌左前方，面試前放口袋裡，增加好運氣。',
+            'wearing': '戴左手招貴人，適合需要人脈的業務、創業者。',
+            'alternative': '綠幽靈、綠東陵'
+        }
     },
     '考試': {
-        'primary': {'name': '螢石', 'color': '#9370DB', 'benefit': '增強記憶，思緒清晰', 'usage': '讀書考試時隨身攜帶'},
-        'secondary': {'name': '白水晶', 'color': '#F5F5F5', 'benefit': '淨化思緒，提升專注', 'usage': '放書桌上'}
+        'primary': {
+            'name': '螢石',
+            'color': '#9370DB',
+            'benefit': '增強記憶力，讓腦袋更清晰、讀書更專注！',
+            'placement': '放書桌正前方，跟視線平行，讀累了看一眼幫助回神。考試當天放筆袋帶進考場！',
+            'wearing': '戴左手接收專注能量，寫考卷時會覺得思緒比較清楚喔～',
+            'alternative': '白水晶、紫水晶'
+        },
+        'secondary': {
+            'name': '白水晶',
+            'color': '#F5F5F5',
+            'benefit': '淨化思緒，頭腦清明不卡關！',
+            'placement': '放書桌上，保持周圍整潔通風，它是「水晶之王」，百搭萬用！',
+            'wearing': '戴左手淨化能量，隨時都可以戴，不挑場合。',
+            'alternative': '螢石、閃靈鑽'
+        }
     },
     '財運': {
-        'primary': {'name': '綠幽靈', 'color': '#90EE90', 'benefit': '招正財，事業財運亨通', 'usage': '放財位或收銀台'},
-        'secondary': {'name': '蜜蠟', 'color': '#FFB347', 'benefit': '招財納福，穩定財源', 'usage': '隨身佩戴招財'}
+        'primary': {
+            'name': '綠幽靈',
+            'color': '#90EE90',
+            'benefit': '招正財，讓你的努力被看見、該賺的都賺到！',
+            'placement': '放「財位」最棒——就是大門斜對角那個角落，保持明亮通風，前面別堆雜物擋財路！做生意的放收銀台旁邊也很讚。',
+            'wearing': '戴左手招正財，做業務的朋友一定要有一條！',
+            'alternative': '綠東陵、綠髮晶'
+        },
+        'secondary': {
+            'name': '黃水晶',
+            'color': '#FFD700',
+            'benefit': '招偏財，投資運、意外之財的好幫手！',
+            'placement': '放辦公桌左前方，或放錢包、保險箱旁邊都很好。',
+            'wearing': '戴左手增強自信，財運好的時候會更敢把握機會！',
+            'alternative': '茶晶、蜜蠟'
+        }
     },
     '健康': {
-        'primary': {'name': '鈦赫茲', 'color': '#708090', 'benefit': '促進循環，增強能量', 'usage': '長期佩戴調理身體'},
-        'secondary': {'name': '綠龍晶', 'color': '#2E8B57', 'benefit': '療癒身心，穩定情緒', 'usage': '放床頭或隨身'}
+        'primary': {
+            'name': '鈦赫茲',
+            'color': '#708090',
+            'benefit': '促進循環、補充能量，現代人必備的養生好物！',
+            'placement': '放床頭櫃，睡覺時讓它陪著你。或是哪裡痠痛就貼哪裡，它導熱很快，會有溫溫熱熱的感覺～',
+            'wearing': '戴左手或放在不舒服的部位，很適合久坐辦公室、肩頸僵硬的朋友！',
+            'alternative': '綠東陵、黑曜石'
+        },
+        'secondary': {
+            'name': '綠東陵',
+            'color': '#3CB371',
+            'benefit': '穩定身心，適合長期調理、慢慢養氣色！',
+            'placement': '放客廳明亮處，或隨身攜帶都可以。',
+            'wearing': '戴左手穩定情緒，適合壓力大、容易焦慮的人。',
+            'alternative': '綠幽靈、孔雀石'
+        }
     },
     '人際': {
-        'primary': {'name': '藍碧璽', 'color': '#4169E1', 'benefit': '增強溝通，化解誤會', 'usage': '社交場合佩戴'},
-        'secondary': {'name': '藍水翡翠', 'color': '#5F9EA0', 'benefit': '平靜心靈，人際和諧', 'usage': '與人溝通時佩戴'}
+        'primary': {
+            'name': '粉水晶',
+            'color': '#FFB6C1',
+            'benefit': '增進人緣，讓人對你有好感、相處更融洽！',
+            'placement': '放客廳或辦公桌上都可以，讓粉嫩能量幫你軟化氣場。',
+            'wearing': '戴左手增強親和力，開會、社交場合特別有用！',
+            'alternative': '月光石、藍紋瑪瑙'
+        },
+        'secondary': {
+            'name': '藍碧璽',
+            'color': '#4169E1',
+            'benefit': '幫助溝通，讓你說的話更有說服力！',
+            'placement': '隨身攜帶就好，重要溝通場合放口袋裡。',
+            'wearing': '戴左手增強表達，適合業務、老師、需要說服別人的工作。',
+            'alternative': '藍紋瑪瑙、海藍寶'
+        }
     },
     '抉擇': {
-        'primary': {'name': '赤鐵礦', 'color': '#696969', 'benefit': '接地穩定，增強意志', 'usage': '重大決定前握在手中'},
-        'secondary': {'name': '閃靈鑽', 'color': '#E8E8E8', 'benefit': '淨化思緒，看清方向', 'usage': '冥想時使用'}
+        'primary': {
+            'name': '紫水晶',
+            'color': '#9370DB',
+            'benefit': '增強直覺判斷，讓你在關鍵時刻做出正確選擇！',
+            'placement': '放床頭幫助睡眠時整理思緒，或冥想時握在手中，讓靈感自然浮現。',
+            'wearing': '戴左手增強第六感，重要決定前可以握著它靜心想一想。',
+            'alternative': '白水晶、閃靈鑽'
+        },
+        'secondary': {
+            'name': '閃靈鑽',
+            'color': '#E8E8E8',
+            'benefit': '淨化思緒、放大意念，讓你看清方向！',
+            'placement': '重大決定前雙手握住冥想，讓它幫你釐清思緒。',
+            'wearing': '雙手握住，淨化並放大你內心真正的聲音。',
+            'alternative': '白水晶、紫水晶'
+        }
     },
     '綜合': {
-        'primary': {'name': '白水晶', 'color': '#F5F5F5', 'benefit': '萬能水晶，淨化提升', 'usage': '適合任何情況'},
-        'secondary': {'name': '孔雀石', 'color': '#3CB371', 'benefit': '療癒保護，轉化能量', 'usage': '日常佩戴皆宜'}
+        'primary': {
+            'name': '白水晶',
+            'color': '#F5F5F5',
+            'benefit': '萬用水晶之王，淨化、提升、百搭不出錯！',
+            'placement': '放哪裡都好！書桌、客廳、床頭都可以，保持周圍整潔就行。',
+            'wearing': '戴左手淨化能量，任何場合都適合，新手首選！',
+            'alternative': '紫水晶、月光石'
+        },
+        'secondary': {
+            'name': '紫水晶',
+            'color': '#9370DB',
+            'benefit': '靈性提升，讓你更有智慧、更懂得處理事情！',
+            'placement': '放床頭或書房，幫助睡眠品質和思考能力。',
+            'wearing': '戴左手增強直覺，適合需要常動腦的工作。',
+            'alternative': '白水晶、閃靈鑽'
+        }
     }
 }
 
 # 按卦運吉凶推薦
 CRYSTAL_RECOMMENDATIONS = {
     '大吉': {
-        'primary': {'name': '黃水晶', 'color': '#FFD700', 'benefit': '招財旺運，放大正能量', 'usage': '建議放在財位或隨身攜帶'},
-        'secondary': {'name': '蜜蠟', 'color': '#FFB347', 'benefit': '招財納福，好運連連', 'usage': '適合重要場合佩戴'}
+        'primary': {
+            'name': '鈦晶',
+            'color': '#DAA520',
+            'benefit': '運勢大好的時候，用鈦晶把好運放到最大！',
+            'placement': '放辦公桌左前方（貴人位），保持桌面乾淨，讓它幫你吸引更多好事！',
+            'wearing': '戴左手接收滿滿正能量，好運的時候更要把握！',
+            'alternative': '虎眼石、茶晶'
+        },
+        'secondary': {
+            'name': '黃水晶',
+            'color': '#FFD700',
+            'benefit': '財運亨通，讓好運變成實際的收穫！',
+            'placement': '放財位或辦公桌，讓財運跟著好運一起來。',
+            'wearing': '戴左手招財，大吉的日子特別適合談生意！',
+            'alternative': '蜜蠟、綠幽靈'
+        }
     },
     '吉': {
-        'primary': {'name': '綠幽靈', 'color': '#90EE90', 'benefit': '事業穩健，貴人相助', 'usage': '適合放在辦公桌'},
-        'secondary': {'name': '綠髮晶', 'color': '#228B22', 'benefit': '招貴人，把握機遇', 'usage': '隨身攜帶增強運勢'}
+        'primary': {
+            'name': '綠幽靈',
+            'color': '#90EE90',
+            'benefit': '運勢不錯，用綠幽靈讓事業財運更上一層！',
+            'placement': '放財位或辦公桌，穩穩地累積好運和財富。',
+            'wearing': '戴左手招正財，這段時間努力會有回報喔！',
+            'alternative': '綠東陵、綠髮晶'
+        },
+        'secondary': {
+            'name': '綠髮晶',
+            'color': '#228B22',
+            'benefit': '招貴人相助，讓好運有人幫你推一把！',
+            'placement': '放辦公桌左前方，貴人就在你身邊。',
+            'wearing': '戴左手，最近多認識新朋友，說不定就是你的貴人！',
+            'alternative': '綠幽靈、虎眼石'
+        }
     },
     '平': {
-        'primary': {'name': '白水晶', 'color': '#F5F5F5', 'benefit': '淨化磁場，提升智慧', 'usage': '適合冥想或放在書房'},
-        'secondary': {'name': '硨磲', 'color': '#FFFAF0', 'benefit': '安神淨化，消災護身', 'usage': '隨身佩戴保平安'}
+        'primary': {
+            'name': '白水晶',
+            'color': '#F5F5F5',
+            'benefit': '運勢平穩，用白水晶保持清明、等待時機！',
+            'placement': '放書桌或床頭，保持周圍整潔，靜心等待轉機。',
+            'wearing': '戴左手淨化能量，平穩的時候最適合充電、學習！',
+            'alternative': '月光石、紫水晶'
+        },
+        'secondary': {
+            'name': '月光石',
+            'color': '#E6E6FA',
+            'benefit': '增強直覺，讓你在平淡中發現機會！',
+            'placement': '放床頭，睡前看一眼，讓靈感在夢中發酵。',
+            'wearing': '戴左手，女生特別適合，能柔化氣場、增加魅力。',
+            'alternative': '白水晶、硨磲'
+        }
     },
     '小心': {
-        'primary': {'name': '蟲蝕沉香', 'color': '#8B4513', 'benefit': '安神靜心，化解煩憂', 'usage': '放床頭助眠或隨身'},
-        'secondary': {'name': '黑瑪瑙', 'color': '#1C1C1C', 'benefit': '穩定情緒，消除負能量', 'usage': '隨身佩戴保護'}
+        'primary': {
+            'name': '紫水晶',
+            'color': '#9370DB',
+            'benefit': '運勢需要留意，用紫水晶保持冷靜判斷！',
+            'placement': '放床頭幫助睡眠，讓你休息好、判斷才會準。',
+            'wearing': '戴左手穩定情緒，遇事先冷靜，別衝動行事。',
+            'alternative': '黑瑪瑙、白水晶'
+        },
+        'secondary': {
+            'name': '黑瑪瑙',
+            'color': '#1C1C1C',
+            'benefit': '穩定情緒、消除負能量，幫你度過低潮！',
+            'placement': '隨身攜帶，感覺不對勁的時候握一握。',
+            'wearing': '戴右手排出負能量，讓壞情緒不要累積。',
+            'alternative': '紫水晶、黑曜石'
+        }
     },
     '凶': {
-        'primary': {'name': '黑曜石', 'color': '#1a1a1a', 'benefit': '強力避邪，化解負能量', 'usage': '佩戴左手或放門口'},
-        'secondary': {'name': '硃砂', 'color': '#DC143C', 'benefit': '鎮宅辟邪，轉危為安', 'usage': '隨身攜帶或放床頭櫃'}
+        'primary': {
+            'name': '黑曜石',
+            'color': '#1a1a1a',
+            'benefit': '運勢低迷，用黑曜石強力擋煞、化解負能量！',
+            'placement': '放大門口或玄關，記得「面朝外」擋煞氣，就像門神一樣保護你。',
+            'wearing': '這顆要戴「右手」喔！右手是排出負能量的，幫你把髒東西趕走。',
+            'alternative': '黑碧璽、硃砂'
+        },
+        'secondary': {
+            'name': '硃砂',
+            'color': '#DC143C',
+            'benefit': '鎮宅辟邪，傳統最強的護身符！',
+            'placement': '放床頭櫃或隨身護身符袋，鎮宅效果一流。',
+            'wearing': '可以放紅包袋隨身攜帶，不建議長期直接接觸皮膚喔～',
+            'alternative': '黑曜石、黑碧璽'
+        }
     }
 }
 
 # 問題類型關鍵字對應
 CATEGORY_KEYWORDS = {
-    '感情': ['感情', '愛情', '戀愛', '婚姻', '對象', '分手', '復合', '曖昧', '桃花', '另一半', '男友', '女友', '老公', '老婆', '喜歡'],
-    '事業': ['工作', '事業', '職場', '升遷', '面試', '老闆', '同事', '轉職', '創業', '公司', '職業'],
-    '考試': ['考試', '學業', '讀書', '升學', '證照', '考研', '國考', '測驗', '成績'],
-    '財運': ['財運', '投資', '股票', '賺錢', '理財', '買賣', '彩券', '財務', '收入', '薪水'],
-    '健康': ['健康', '身體', '生病', '手術', '治療', '醫院', '看醫生', '康復', '養生'],
-    '人際': ['人際', '朋友', '社交', '相處', '同學', '鄰居', '家人', '親戚', '貴人'],
-    '抉擇': ['選擇', '決定', '該不該', '要不要', '如何', '怎麼辦', '糾結', '抉擇', '兩難']
+    '感情': ['感情', '愛情', '戀愛', '婚姻', '對象', '分手', '復合', '曖昧', '桃花', '另一半', '男友', '女友', '老公', '老婆', '喜歡', '交往', '結婚', '告白'],
+    '事業': ['工作', '事業', '職場', '升遷', '面試', '老闆', '同事', '轉職', '創業', '公司', '職業', '加薪', '離職', '跳槽'],
+    '考試': ['考試', '學業', '讀書', '升學', '證照', '考研', '國考', '測驗', '成績', '考上', '上榜', '錄取'],
+    '財運': ['財運', '投資', '股票', '賺錢', '理財', '買賣', '彩券', '財務', '收入', '薪水', '中獎', '發財'],
+    '健康': ['健康', '身體', '生病', '手術', '治療', '醫院', '看醫生', '康復', '養生', '檢查', '開刀'],
+    '人際': ['人際', '朋友', '社交', '相處', '同學', '鄰居', '家人', '親戚', '貴人', '小人', '吵架', '和好'],
+    '抉擇': ['選擇', '決定', '該不該', '要不要', '如何', '怎麼辦', '糾結', '抉擇', '兩難', '猶豫']
 }
 
 def get_category_from_question(question):
@@ -818,57 +1000,17 @@ def get_category_from_question(question):
 def get_crystal_recommendation(aspect, question=None, category=None):
     """
     獲取水晶推薦（優先按問題類型，再按卦運）
-    
-    Args:
-        aspect: 卦運 ('大吉'/'吉'/'平'/'小心'/'凶')
-        question: 用戶問題
-        category: 問題類型（可選，若無則自動判斷）
-    
-    Returns:
-        crystal dict with 'primary' and 'secondary'
     """
     # 判斷問題類型
     if not category and question:
         category = get_category_from_question(question)
     
     # 優先按問題類型推薦
-    if category and category in CRYSTAL_BY_CATEGORY:
+    if category and category != '綜合' and category in CRYSTAL_BY_CATEGORY:
         return CRYSTAL_BY_CATEGORY[category]
     
     # 其次按卦運推薦
     return CRYSTAL_RECOMMENDATIONS.get(aspect, CRYSTAL_RECOMMENDATIONS['平'])
-
-# ============================================================
-# 資料庫
-# ============================================================
-def init_db():
-    conn = sqlite3.connect('yizhan.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_premium INTEGER DEFAULT 0, premium_expires_at TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS user_profiles (user_id TEXT PRIMARY KEY, gender TEXT, age_range TEXT, marital_status TEXT, birth_year INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS divination_records (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, hexagram_code TEXT, hexagram_name TEXT, question TEXT, category TEXT, ai_interpretation TEXT, crystal_recommended TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS daily_usage (user_id TEXT, usage_date DATE, count INTEGER DEFAULT 0, PRIMARY KEY (user_id, usage_date))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS pending_questions (user_id TEXT PRIMARY KEY, question TEXT, category TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS pending_profile (user_id TEXT PRIMARY KEY, step TEXT, gender TEXT, age_range TEXT, marital_status TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS check_ins (user_id TEXT, check_date DATE, streak INTEGER DEFAULT 1, bonus_given TEXT, PRIMARY KEY (user_id, check_date))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS bonus_usage (user_id TEXT, usage_date DATE, bonus_count INTEGER DEFAULT 0, PRIMARY KEY (user_id, usage_date))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS push_settings (user_id TEXT PRIMARY KEY, daily_fortune_enabled INTEGER DEFAULT 0, push_time TEXT DEFAULT '08:00', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
-def get_user(user_id):
-    conn = sqlite3.connect('yizhan.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-    user = c.fetchone()
-    if not user:
-        c.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
-        conn.commit()
-        user = (user_id, get_tw_now(), 0, None)
-    conn.close()
-    return {'user_id': user[0], 'is_premium': user[2], 'premium_expires_at': user[3]}
 
 def get_daily_usage(user_id):
     conn = sqlite3.connect('yizhan.db')
@@ -2249,7 +2391,9 @@ def create_result_flex(result, remaining, is_premium=False, ai_interp=None, cate
                             "contents": [
                                 {"type": "text", "text": crystal['name'], "size": "md", "weight": "bold", "color": "#333333"},
                                 {"type": "text", "text": crystal['benefit'], "size": "sm", "color": "#666666", "wrap": True},
-                                {"type": "text", "text": f"📍 {crystal['usage']}", "size": "xs", "color": "#888888", "wrap": True, "margin": "sm"}
+                                {"type": "text", "text": f"📍 {crystal.get('placement', crystal.get('usage', ''))}", "size": "xs", "color": "#888888", "wrap": True, "margin": "sm"},
+                                {"type": "text", "text": f"🤚 {crystal.get('wearing', '')}", "size": "xs", "color": "#888888", "wrap": True, "margin": "sm"},
+                                {"type": "text", "text": f"💡 預算有限？{crystal.get('alternative', '')}也不錯", "size": "xs", "color": "#9370DB", "wrap": True, "margin": "sm"}
                             ]
                         }
                     ]
