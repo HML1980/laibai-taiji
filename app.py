@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-籟柏太極易占 LINE Bot v6.2
+籟柏太極易占 LINE Bot v6.2.1
 功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧、搖卦儀式（兩步驟）
+
+v6.2.1 修復：
+- 補回 get_user() 函數（自動建立用戶並回傳 dict）
+- 補上 init_db() 函數（建立所有必要資料表）
+- 啟動時自動呼叫 init_db()
 
 Author: SAROW / 籟柏
 License: MIT
-Version: 6.2
+Version: 6.2.1
 """
 
 import os
@@ -57,6 +62,105 @@ handler = WebhookHandler(os.environ.get('CHANNEL_SECRET', ''))
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 FREE_DAILY_LIMIT = 3
+
+DB_PATH = 'yizhan.db'
+
+# ============================================================
+# 資料庫初始化（v6.2.1 新增）
+# ============================================================
+def init_db():
+    """初始化資料庫，建立所有必要資料表（idempotent，可重複呼叫）"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # 用戶基本資料
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        user_id TEXT PRIMARY KEY,
+        is_premium INTEGER DEFAULT 0,
+        premium_expires_at TEXT,
+        referral_code TEXT,
+        referred_by TEXT,
+        total_divinations INTEGER DEFAULT 0,
+        created_at TEXT
+    )''')
+
+    # 每日免費使用次數
+    c.execute('''CREATE TABLE IF NOT EXISTS daily_usage (
+        user_id TEXT,
+        usage_date TEXT,
+        count INTEGER DEFAULT 0,
+        PRIMARY KEY (user_id, usage_date)
+    )''')
+
+    # 占卜紀錄
+    c.execute('''CREATE TABLE IF NOT EXISTS divination_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        hexagram_code TEXT,
+        hexagram_name TEXT,
+        question TEXT,
+        category TEXT,
+        ai_interpretation TEXT,
+        crystal_recommended TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    # 待處理問題（搖卦中暫存）
+    c.execute('''CREATE TABLE IF NOT EXISTS pending_questions (
+        user_id TEXT PRIMARY KEY,
+        question TEXT,
+        category TEXT,
+        created_at TEXT
+    )''')
+
+    # 待填用戶資料（多步驟引導暫存）
+    c.execute('''CREATE TABLE IF NOT EXISTS pending_profile (
+        user_id TEXT PRIMARY KEY,
+        step TEXT,
+        gender TEXT,
+        age_range TEXT,
+        created_at TEXT
+    )''')
+
+    # 用戶個資（性別、年齡、婚姻）
+    c.execute('''CREATE TABLE IF NOT EXISTS user_profiles (
+        user_id TEXT PRIMARY KEY,
+        gender TEXT,
+        age_range TEXT,
+        marital_status TEXT,
+        updated_at TEXT
+    )''')
+
+    # 簽到紀錄
+    c.execute('''CREATE TABLE IF NOT EXISTS check_ins (
+        user_id TEXT,
+        check_date TEXT,
+        streak INTEGER DEFAULT 1,
+        bonus_given TEXT,
+        PRIMARY KEY (user_id, check_date)
+    )''')
+
+    # 簽到獎勵的占卜次數
+    c.execute('''CREATE TABLE IF NOT EXISTS bonus_usage (
+        user_id TEXT,
+        usage_date TEXT,
+        bonus_count INTEGER DEFAULT 0,
+        PRIMARY KEY (user_id, usage_date)
+    )''')
+
+    # 推送設定
+    c.execute('''CREATE TABLE IF NOT EXISTS push_settings (
+        user_id TEXT PRIMARY KEY,
+        daily_fortune_enabled INTEGER DEFAULT 0,
+        push_time TEXT DEFAULT '08:00'
+    )''')
+
+    conn.commit()
+    conn.close()
+    print(f'[init_db] Database initialized at {DB_PATH}')
+
+# 啟動時自動建表
+init_db()
 
 # ============================================================
 # 問事分類系統
@@ -1012,8 +1116,51 @@ def get_crystal_recommendation(aspect, question=None, category=None):
     # 其次按卦運推薦
     return CRYSTAL_RECOMMENDATIONS.get(aspect, CRYSTAL_RECOMMENDATIONS['平'])
 
+# ============================================================
+# 用戶基本資料（v6.2.1 新增 get_user）
+# ============================================================
+def get_user(user_id):
+    """取得用戶資料；用戶不存在則自動建立。回傳 dict。"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # 確保用戶存在
+    c.execute(
+        'INSERT OR IGNORE INTO users (user_id, created_at) VALUES (?, ?)',
+        (user_id, get_tw_now().isoformat())
+    )
+
+    # 取得用戶資料
+    c.execute('''SELECT user_id, is_premium, premium_expires_at,
+                        referral_code, referred_by, total_divinations, created_at
+                 FROM users WHERE user_id = ?''', (user_id,))
+    row = c.fetchone()
+    conn.commit()
+    conn.close()
+
+    if row:
+        return {
+            'user_id': row[0],
+            'is_premium': row[1] or 0,
+            'premium_expires_at': row[2],
+            'referral_code': row[3],
+            'referred_by': row[4],
+            'total_divinations': row[5] or 0,
+            'created_at': row[6]
+        }
+    # 理論上 INSERT OR IGNORE 後一定能取到，這裡是防呆
+    return {
+        'user_id': user_id,
+        'is_premium': 0,
+        'premium_expires_at': None,
+        'referral_code': None,
+        'referred_by': None,
+        'total_divinations': 0,
+        'created_at': None
+    }
+
 def get_daily_usage(user_id):
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT count FROM daily_usage WHERE user_id = ? AND usage_date = ?', (user_id, get_tw_today().isoformat()))
     result = c.fetchone()
@@ -1021,7 +1168,7 @@ def get_daily_usage(user_id):
     return result[0] if result else 0
 
 def increment_daily_usage(user_id):
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('INSERT INTO daily_usage (user_id, usage_date, count) VALUES (?, ?, 1) ON CONFLICT(user_id, usage_date) DO UPDATE SET count = count + 1', (user_id, get_tw_today().isoformat()))
     conn.commit()
@@ -1044,21 +1191,21 @@ def can_divine(user_id):
     return remaining > 0, remaining
 
 def save_divination_record(user_id, code, name, question=None, category=None, ai_interp=None, crystal=None):
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('INSERT INTO divination_records (user_id, hexagram_code, hexagram_name, question, category, ai_interpretation, crystal_recommended) VALUES (?, ?, ?, ?, ?, ?, ?)', (user_id, code, name, question, category, ai_interp, crystal))
     conn.commit()
     conn.close()
 
 def save_pending_question(user_id, question, category=None):
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('INSERT OR REPLACE INTO pending_questions (user_id, question, category, created_at) VALUES (?, ?, ?, ?)', (user_id, question, category, get_tw_now()))
+    c.execute('INSERT OR REPLACE INTO pending_questions (user_id, question, category, created_at) VALUES (?, ?, ?, ?)', (user_id, question, category, get_tw_now().isoformat()))
     conn.commit()
     conn.close()
 
 def get_pending_question(user_id):
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT question, category FROM pending_questions WHERE user_id = ?', (user_id,))
     result = c.fetchone()
@@ -1069,7 +1216,7 @@ def get_pending_question(user_id):
     return {'question': result[0], 'category': result[1]} if result else None
 
 def update_pending_category(user_id, category):
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('UPDATE pending_questions SET category = ? WHERE user_id = ?', (category, user_id))
     conn.commit()
@@ -1077,7 +1224,7 @@ def update_pending_category(user_id, category):
 
 def get_pending_status(user_id):
     """取得用戶的待處理問題狀態"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT question, category FROM pending_questions WHERE user_id = ?', (user_id,))
     result = c.fetchone()
@@ -1089,7 +1236,7 @@ def get_pending_status(user_id):
 # ============================================================
 def get_user_profile(user_id):
     """取得用戶資料"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT gender, age_range, marital_status FROM user_profiles WHERE user_id = ?', (user_id,))
     result = c.fetchone()
@@ -1100,18 +1247,18 @@ def get_user_profile(user_id):
 
 def save_user_profile(user_id, gender, age_range, marital_status):
     """儲存用戶資料"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''INSERT OR REPLACE INTO user_profiles 
                  (user_id, gender, age_range, marital_status, updated_at) 
                  VALUES (?, ?, ?, ?, ?)''', 
-              (user_id, gender, age_range, marital_status, get_tw_now()))
+              (user_id, gender, age_range, marital_status, get_tw_now().isoformat()))
     conn.commit()
     conn.close()
 
 def get_pending_profile(user_id):
     """取得待填寫的用戶資料狀態"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT step, gender, age_range FROM pending_profile WHERE user_id = ?', (user_id,))
     result = c.fetchone()
@@ -1122,18 +1269,18 @@ def get_pending_profile(user_id):
 
 def save_pending_profile(user_id, step, gender=None, age_range=None):
     """儲存待填寫的用戶資料狀態"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''INSERT OR REPLACE INTO pending_profile 
                  (user_id, step, gender, age_range, created_at) 
                  VALUES (?, ?, ?, ?, ?)''', 
-              (user_id, step, gender, age_range, get_tw_now()))
+              (user_id, step, gender, age_range, get_tw_now().isoformat()))
     conn.commit()
     conn.close()
 
 def clear_pending_profile(user_id):
     """清除待填寫的用戶資料狀態"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('DELETE FROM pending_profile WHERE user_id = ?', (user_id,))
     conn.commit()
@@ -1144,7 +1291,7 @@ def clear_pending_profile(user_id):
 # ============================================================
 def get_check_in_status(user_id):
     """取得用戶簽到狀態"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     today = get_tw_today().isoformat()
     yesterday = (get_tw_today() - timedelta(days=1)).isoformat()
@@ -1172,7 +1319,7 @@ def get_check_in_status(user_id):
 
 def do_check_in(user_id):
     """執行簽到"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     today = get_tw_today().isoformat()
     yesterday = (get_tw_today() - timedelta(days=1)).isoformat()
@@ -1229,11 +1376,11 @@ def do_check_in(user_id):
 
 def give_vip_bonus(user_id, days):
     """給予 VIP 獎勵天數"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
     # 確保用戶存在
-    c.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
+    c.execute('INSERT OR IGNORE INTO users (user_id, created_at) VALUES (?, ?)', (user_id, get_tw_now().isoformat()))
     
     # 取得目前 VIP 狀態
     c.execute('SELECT is_premium, premium_expires_at FROM users WHERE user_id = ?', (user_id,))
@@ -1262,7 +1409,7 @@ def give_vip_bonus(user_id, days):
 
 def get_bonus_usage(user_id):
     """取得今日獎勵次數"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT bonus_count FROM bonus_usage WHERE user_id = ? AND usage_date = ?',
               (user_id, get_tw_today().isoformat()))
@@ -1275,7 +1422,7 @@ def get_bonus_usage(user_id):
 # ============================================================
 def get_push_settings(user_id):
     """取得用戶推送設定"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT daily_fortune_enabled, push_time FROM push_settings WHERE user_id = ?', (user_id,))
     result = c.fetchone()
@@ -1286,7 +1433,7 @@ def get_push_settings(user_id):
 
 def save_push_settings(user_id, enabled, push_time='08:00'):
     """儲存用戶推送設定"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''INSERT INTO push_settings (user_id, daily_fortune_enabled, push_time) 
                  VALUES (?, ?, ?) 
@@ -1297,7 +1444,7 @@ def save_push_settings(user_id, enabled, push_time='08:00'):
 
 def get_users_to_push(push_time):
     """取得需要推送的用戶列表"""
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT user_id FROM push_settings WHERE daily_fortune_enabled = 1 AND push_time = ?', (push_time,))
     results = c.fetchall()
@@ -1305,7 +1452,7 @@ def get_users_to_push(push_time):
     return [r[0] for r in results]
 
 def get_user_history(user_id, limit=5):
-    conn = sqlite3.connect('yizhan.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('SELECT hexagram_code, hexagram_name, question, created_at FROM divination_records WHERE user_id = ? ORDER BY created_at DESC LIMIT ?', (user_id, limit))
     records = c.fetchall()
@@ -1339,587 +1486,83 @@ HEXAGRAM_NAMES = {
 
 # 周易六十四卦傳統順序（內部編碼 → 周易卦序）
 HEXAGRAM_ORDER = {
-    '11': 1,   # 乾為天
-    '88': 2,   # 坤為地
-    '64': 3,   # 水雷屯
-    '76': 4,   # 山水蒙
-    '61': 5,   # 水天需
-    '16': 6,   # 天水訟
-    '86': 7,   # 地水師
-    '68': 8,   # 水地比
-    '51': 9,   # 風天小畜
-    '12': 10,  # 天澤履
-    '81': 11,  # 地天泰
-    '18': 12,  # 天地否
-    '13': 13,  # 天火同人
-    '31': 14,  # 火天大有
-    '87': 15,  # 地山謙
-    '48': 16,  # 雷地豫
-    '24': 17,  # 澤雷隨
-    '75': 18,  # 山風蠱
-    '82': 19,  # 地澤臨
-    '58': 20,  # 風地觀
-    '34': 21,  # 火雷噬嗑
-    '73': 22,  # 山火賁
-    '78': 23,  # 山地剝
-    '84': 24,  # 地雷復
-    '14': 25,  # 天雷無妄
-    '71': 26,  # 山天大畜
-    '74': 27,  # 山雷頤
-    '25': 28,  # 澤風大過
-    '66': 29,  # 坎為水
-    '33': 30,  # 離為火
-    '27': 31,  # 澤山咸
-    '45': 32,  # 雷風恆
-    '17': 33,  # 天山遯
-    '41': 34,  # 雷天大壯
-    '38': 35,  # 火地晉
-    '83': 36,  # 地火明夷
-    '53': 37,  # 風火家人
-    '32': 38,  # 火澤睽
-    '67': 39,  # 水山蹇
-    '46': 40,  # 雷水解
-    '72': 41,  # 山澤損
-    '54': 42,  # 風雷益
-    '21': 43,  # 澤天夬
-    '15': 44,  # 天風姤
-    '28': 45,  # 澤地萃
-    '85': 46,  # 地風升
-    '26': 47,  # 澤水困
-    '65': 48,  # 水風井
-    '23': 49,  # 澤火革
-    '35': 50,  # 火風鼎
-    '44': 51,  # 震為雷
-    '77': 52,  # 艮為山
-    '57': 53,  # 風山漸
-    '42': 54,  # 雷澤歸妹
-    '43': 55,  # 雷火豐
-    '37': 56,  # 火山旅
-    '55': 57,  # 巽為風
-    '22': 58,  # 兌為澤
-    '56': 59,  # 風水渙
-    '62': 60,  # 水澤節
-    '52': 61,  # 風澤中孚
-    '47': 62,  # 雷山小過
-    '63': 63,  # 水火既濟
-    '36': 64,  # 火水未濟
+    '11': 1, '88': 2, '64': 3, '76': 4, '61': 5, '16': 6, '86': 7, '68': 8,
+    '51': 9, '12': 10, '81': 11, '18': 12, '13': 13, '31': 14, '87': 15, '48': 16,
+    '24': 17, '75': 18, '82': 19, '58': 20, '34': 21, '73': 22, '78': 23, '84': 24,
+    '14': 25, '71': 26, '74': 27, '25': 28, '66': 29, '33': 30, '27': 31, '45': 32,
+    '17': 33, '41': 34, '38': 35, '83': 36, '53': 37, '32': 38, '67': 39, '46': 40,
+    '72': 41, '54': 42, '21': 43, '15': 44, '28': 45, '85': 46, '26': 47, '65': 48,
+    '23': 49, '35': 50, '44': 51, '77': 52, '57': 53, '42': 54, '43': 55, '37': 56,
+    '55': 57, '22': 58, '56': 59, '62': 60, '52': 61, '47': 62, '63': 63, '36': 64,
 }
 
 
 # 豐富的卦象解讀 - 包含故事性描述、運勢預測、引導升級的懸念
 HEXAGRAM_MEANINGS = {
-    '11': {
-        'aspect': '大吉',
-        'brief': '龍騰九天，乾坤在握',
-        'story': '天行健，君子以自強不息。此卦如日中天，正是大展宏圖之時。您的能量正處於巔峰狀態，無論事業、感情或財運都將迎來突破。',
-        'fortune': '近七日內將有意想不到的好消息傳來，可能與一位貴人有關。把握住這波運勢，主動出擊將事半功倍...',
-        'fortune_hook': '🔮 想知道貴人是誰？如何把握這波運勢的最佳時機？',
-        'advice': '宜積極進取，大膽行動。此時猶豫不決反而錯失良機。'
-    },
-    '12': {
-        'aspect': '小心',
-        'brief': '如履薄冰，步步為營',
-        'story': '履虎尾，不咥人，亨。此卦提醒您正行走在微妙的處境中，看似平靜的表面下暗藏玄機。但只要謹慎行事，終能化險為夷。',
-        'fortune': '近期可能面臨一個需要抉擇的情況，表面上的好選擇未必是正確答案。有人在暗中觀察您的反應...',
-        'fortune_hook': '🔮 想知道該如何識破迷局？哪個選擇才是正確的？',
-        'advice': '謹言慎行，三思後行。遇事多觀察，少表態。'
-    },
-    '13': {
-        'aspect': '吉',
-        'brief': '志同道合，眾志成城',
-        'story': '同人于野，亨。此卦象徵人際關係的和諧與合作的力量。您身邊正聚集著與您理念相近的人，這是難得的機緣。',
-        'fortune': '近期將遇到一位與您「頻率相同」的人，可能在意想不到的場合。這段關係將為您帶來重要的轉變...',
-        'fortune_hook': '🔮 想知道這個人會在哪裡出現？如何識別他/她？',
-        'advice': '廣結善緣，真誠待人。合作比單打獨鬥更有力量。'
-    },
-    '14': {
-        'aspect': '吉',
-        'brief': '天道無妄，誠者自通',
-        'story': '無妄，元亨利貞。此卦告訴您：保持真誠，不妄作為，天道自然會眷顧。近期發生的事情都有其深意，順其自然反而是最好的策略。',
-        'fortune': '一件看似「意外」的事情正在醞釀，但這其實是宇宙的安排。表面的阻礙實際上是在保護您...',
-        'fortune_hook': '🔮 想知道這個「意外」是什麼？如何將它轉化為機遇？',
-        'advice': '保持真誠，順應天時。不強求，不妄動。'
-    },
-    '15': {
-        'aspect': '平',
-        'brief': '邂逅姻緣，隨緣應變',
-        'story': '姤，女壯，勿用取女。此卦暗示意外的相遇，可能帶來新的機會或關係。但需要慧眼識人，不被表象迷惑。',
-        'fortune': '近期會有一個「突然出現」的人或機會，看起來很誘人。但第一印象可能有所偏差...',
-        'fortune_hook': '🔮 想知道如何辨別真偽？這個機會該不該把握？',
-        'advice': '保持警覺，觀察為主。不要被一時的熱情沖昏頭。'
-    },
-    '16': {
-        'aspect': '凶',
-        'brief': '爭訟之象，退一步海闊天空',
-        'story': '訟，有孚窒惕，中吉，終凶。此卦警示您正處於或即將進入一個爭端的處境。贏了道理，可能輸了更多。',
-        'fortune': '近期要特別注意人際關係中的暗流。有人可能對您心存不滿，或者一場誤會正在發酵...',
-        'fortune_hook': '🔮 想知道是誰在背後？如何化解這場危機？',
-        'advice': '忍讓為上，和解為貴。爭一時不如謀長遠。'
-    },
-    '17': {
-        'aspect': '平',
-        'brief': '韜光養晦，以退為進',
-        'story': '遯，亨，小利貞。此卦如同智者的戰略性撤退，暫時的隱忍是為了更好的出擊。現在不是正面對抗的時機。',
-        'fortune': '近期您可能感到某些事情「不對勁」，這種直覺是對的。暫時的退讓會為您保存實力...',
-        'fortune_hook': '🔮 想知道該退到什麼程度？何時才是反攻的時機？',
-        'advice': '避其鋒芒，保存實力。蟄伏是為了更好的騰飛。'
-    },
-    '18': {
-        'aspect': '凶',
-        'brief': '天地閉塞，靜待春來',
-        'story': '否之匪人，不利君子貞。此卦象徵暫時的阻滯，上下不通、內外不和。但請記住：否極泰來，黑暗之後必是黎明。',
-        'fortune': '近期可能感到事事不順，溝通不暢。但這是黎明前的黑暗，一個重要的轉折點即將來臨...',
-        'fortune_hook': '🔮 想知道轉機何時出現？如何度過這段低潮期？',
-        'advice': '靜待時機，不宜強求。養精蓄銳，準備迎接轉機。'
-    },
-    '21': {
-        'aspect': '吉',
-        'brief': '果敢決斷，勇往直前',
-        'story': '夬，揚于王庭。此卦如同破曉的陽光，衝破黑暗。是時候做出那個您一直猶豫的決定了。',
-        'fortune': '近期有一件事需要您「當機立斷」，過多的猶豫反而會錯失良機。答案其實已在您心中...',
-        'fortune_hook': '🔮 想知道應該選擇哪個方向？最佳決策時機是何時？',
-        'advice': '當斷則斷，展現魄力。猶豫不決是最大的風險。'
-    },
-    '22': {
-        'aspect': '吉',
-        'brief': '和悅之象，喜樂盈門',
-        'story': '兌，亨利貞。此卦如同春風拂面，帶來愉悅與和諧。您的磁場正在吸引美好的人事物。',
-        'fortune': '近期將有令您開心的消息，可能來自朋友的邀約或一個期待已久的結果。笑容是您最好的開運符...',
-        'fortune_hook': '🔮 想知道這個好消息具體是什麼？如何讓喜悅加倍？',
-        'advice': '保持愉悅，廣結人緣。好心情會帶來好運氣。'
-    },
-    '23': {
-        'aspect': '平',
-        'brief': '除舊布新，蛻變重生',
-        'story': '革，己日乃孚。此卦如同蝴蝶破繭，象徵重大的轉變。改變雖然不易，但這正是您需要的蛻變。',
-        'fortune': '近期您的生活可能面臨一些變化，也許是主動的，也許是被動的。這個變化看似動盪，實則是新生...',
-        'fortune_hook': '🔮 想知道該如何順利度過轉變期？變化後會更好嗎？',
-        'advice': '勇於改變，擁抱新局。蛻變是成長的必經之路。'
-    },
-    '24': {
-        'aspect': '吉',
-        'brief': '隨機應變，順勢而為',
-        'story': '隨，元亨利貞，無咎。此卦告訴您：識時務者為俊傑。能夠靈活應變的人，才能在變化中找到機會。',
-        'fortune': '近期環境可能有所變化，但這恰恰是您展現應變能力的機會。有人正在觀察您如何處理變局...',
-        'fortune_hook': '🔮 想知道應該跟隨什麼趨勢？如何在變化中勝出？',
-        'advice': '靈活變通，順勢而為。僵化固執只會被淘汰。'
-    },
-    '25': {
-        'aspect': '小心',
-        'brief': '過猶不及，適可而止',
-        'story': '大過，棟撓，利有攸往，亨。此卦警示您：再好的事情，過度了也會變成負擔。知道何時停下來，是一種智慧。',
-        'fortune': '近期您可能在某件事上投入過多，無論是精力、金錢還是感情。過度的付出可能帶來反效果...',
-        'fortune_hook': '🔮 想知道具體是哪方面過度了？如何找回平衡？',
-        'advice': '量力而行，適可而止。過度的熱情可能燒傷自己。'
-    },
-    '26': {
-        'aspect': '凶',
-        'brief': '身陷困境，守正待援',
-        'story': '困，亨，貞大人吉。此卦如同困獸之鬥，但請記住：真正的勇者，是在困境中依然保持希望的人。',
-        'fortune': '近期可能遇到一些阻礙，感覺四處碰壁。但這個困境中藏著一個轉機，只有冷靜下來才能發現...',
-        'fortune_hook': '🔮 想知道突破口在哪裡？誰能幫您走出困境？',
-        'advice': '堅守正道，保持信心。困境是暫時的，成長是永恆的。'
-    },
-    '27': {
-        'aspect': '吉',
-        'brief': '心有靈犀，感應相通',
-        'story': '咸，亨利貞，取女吉。此卦是感應之卦，象徵心靈的相通與情感的連結。您與某人或某事之間存在著微妙的緣分。',
-        'fortune': '近期您會感受到一種「說不清的連結」，可能是對某人、某地或某個想法。這種直覺是真實的...',
-        'fortune_hook': '🔮 想知道這個連結指向什麼？如何加深這份感應？',
-        'advice': '敞開心扉，感受連結。真誠的能量會吸引相同的頻率。'
-    },
-    '28': {
-        'aspect': '吉',
-        'brief': '眾緣和合，聚沙成塔',
-        'story': '萃，亨。王假有廟。此卦象徵聚集與凝聚，眾人的力量匯聚在一起，可以成就大事。',
-        'fortune': '近期是拓展人脈、建立團隊的好時機。一群人正在向您靠近，或者您正被邀請加入某個圈子...',
-        'fortune_hook': '🔮 想知道該加入哪個圈子？如何識別真正的夥伴？',
-        'advice': '團結合作，凝聚力量。一個人走得快，一群人走得遠。'
-    },
-    '31': {
-        'aspect': '大吉',
-        'brief': '大有斬獲，前程似錦',
-        'story': '大有，元亨。此卦是豐收之象，您之前的付出將得到豐厚的回報。這是值得慶祝的時刻。',
-        'fortune': '近期將有意想不到的收穫，可能是物質上的，也可能是精神上的。一個機會正在向您敞開大門...',
-        'fortune_hook': '🔮 想知道這個機會在哪個領域？如何最大化這波收穫？',
-        'advice': '把握機遇，大展宏圖。好運來臨時，要有準備接住它的能力。'
-    },
-    '32': {
-        'aspect': '平',
-        'brief': '觀點分歧，各執己見',
-        'story': '睽，小事吉。此卦象徵差異與分離，但差異不一定是壞事。有時候，不同的視角能帶來新的發現。',
-        'fortune': '近期可能與某人產生意見分歧，表面上看是衝突，實際上可能是一個重新認識彼此的機會...',
-        'fortune_hook': '🔮 想知道如何化解分歧？這段關係還有轉圜的餘地嗎？',
-        'advice': '求同存異，理解差異。每個人都有自己的視角。'
-    },
-    '33': {
-        'aspect': '吉',
-        'brief': '光明正大，文采煥發',
-        'story': '離，利貞，亨。此卦如同正午的太陽，光芒萬丈。這是展現自己、綻放光芒的時刻。',
-        'fortune': '近期您的才華將得到展示的機會，無論是在工作還是生活中。有人正等著被您的光芒吸引...',
-        'fortune_hook': '🔮 想知道該展現哪方面的才華？這個舞台在哪裡？',
-        'advice': '展現自信，散發光芒。不要害怕成為焦點。'
-    },
-    '34': {
-        'aspect': '吉',
-        'brief': '撥雲見日，障礙消除',
-        'story': '噬嗑，亨，利用獄。此卦象徵咬碎障礙，排除阻礙。那些困擾您的問題，終於要解決了。',
-        'fortune': '近期一個懸而未決的問題將獲得解答。可能需要一些果斷的行動，但結果會是好的...',
-        'fortune_hook': '🔮 想知道該採取什麼行動？解決問題的關鍵是什麼？',
-        'advice': '果斷行動，排除障礙。問題不會自己消失，但會被解決。'
-    },
-    '35': {
-        'aspect': '吉',
-        'brief': '鼎新革故，創造新局',
-        'story': '鼎，元吉，亨。此卦如同烹煮美食的鼎，象徵轉化與創新。舊的養分將轉化為新的能量。',
-        'fortune': '近期是創新的好時機，一個新的想法或項目正在您心中醞釀。這個「新東西」可能改變您的軌道...',
-        'fortune_hook': '🔮 想知道這個創新該往哪個方向發展？需要哪些資源？',
-        'advice': '創新突破，轉化升級。不破不立，大破大立。'
-    },
-    '36': {
-        'aspect': '平',
-        'brief': '功敗垂成，再接再厲',
-        'story': '未濟，亨，小狐汔濟，濡其尾，無攸利。此卦提醒您：雖然接近終點，但最後一哩路往往最難走。',
-        'fortune': '近期某件事看似即將完成，但可能出現小變數。不要在最後關頭鬆懈...',
-        'fortune_hook': '🔮 想知道變數可能出現在哪裡？如何確保完美收官？',
-        'advice': '堅持到底，不要鬆懈。行百里者半九十。'
-    },
-    '37': {
-        'aspect': '平',
-        'brief': '旅途在外，隨遇而安',
-        'story': '旅，小亨，旅貞吉。此卦象徵旅行與漂泊，在不熟悉的環境中尋找方向。',
-        'fortune': '近期可能有出行的機會，或者在某個「陌生領域」探索。這段旅程會帶給您意想不到的收穫...',
-        'fortune_hook': '🔮 想知道該往哪個方向去？旅途中會遇到什麼人？',
-        'advice': '入境隨俗，保持彈性。旅行是最好的學習。'
-    },
-    '38': {
-        'aspect': '吉',
-        'brief': '步步高升，前程似錦',
-        'story': '晉，康侯用錫馬蕃庶，晝日三接。此卦如同旭日東升，步步向上。您的努力即將得到認可。',
-        'fortune': '近期將有晉升或進步的機會，無論是職位、能力還是聲望。有人正在關注您的表現...',
-        'fortune_hook': '🔮 想知道機會何時降臨？該如何表現才能脫穎而出？',
-        'advice': '穩健前進，展現實力。機會是給準備好的人。'
-    },
-    '41': {
-        'aspect': '大吉',
-        'brief': '氣勢如虹，大有可為',
-        'story': '大壯，利貞。此卦如同春雷震天，氣勢正盛。這是您最有力量的時刻。',
-        'fortune': '近期您的能量將達到高峰，無論做什麼都會事半功倍。一個大展身手的舞台正在等著您...',
-        'fortune_hook': '🔮 想知道該如何運用這股力量？在哪個領域突破？',
-        'advice': '乘勝追擊，大膽行動。力量巔峰時，就是出擊時。'
-    },
-    '42': {
-        'aspect': '吉',
-        'brief': '姻緣和合，情感順遂',
-        'story': '歸妹，征凶，無攸利。此卦與情感關係密切，象徵著緣分的牽引與歸屬。',
-        'fortune': '近期感情方面可能有新的發展，單身者有望遇到有緣人，有伴侶者關係可能更進一步...',
-        'fortune_hook': '🔮 想知道緣分何時到來？對方是什麼樣的人？',
-        'advice': '珍惜緣分，真誠相待。緣分天注定，但幸福靠經營。'
-    },
-    '43': {
-        'aspect': '大吉',
-        'brief': '豐盛圓滿，鼎盛時期',
-        'story': '豐，亨，王假之，勿憂，宜日中。此卦是極致的豐盛之象，如同正午的太陽最為燦爛。',
-        'fortune': '近期是您的高光時刻，各方面都將達到頂峰。但請記住：盛極必衰，要懂得在高處為低潮做準備...',
-        'fortune_hook': '🔮 想知道如何延長這波好運？該提前做哪些準備？',
-        'advice': '居安思危，未雨綢繆。最好的時候，要想到最壞的可能。'
-    },
-    '44': {
-        'aspect': '平',
-        'brief': '警醒振作，蓄勢待發',
-        'story': '震，亨。震來虩虩，笑言啞啞。此卦如同雷聲隆隆，既是警示也是喚醒。',
-        'fortune': '近期可能遇到一些「震動」，這些震動是在提醒您某些被忽略的事情。驚醒之後，就是行動...',
-        'fortune_hook': '🔮 想知道這個警示是關於什麼？該如何應對？',
-        'advice': '提高警覺，保持清醒。震動是宇宙的提醒。'
-    },
-    '45': {
-        'aspect': '吉',
-        'brief': '持之以恆，終有所成',
-        'story': '恆，亨，無咎，利貞。此卦強調恆久之道，堅持的力量超乎想像。',
-        'fortune': '您正在做的某件事，需要再堅持一段時間。勝利已經在望，放棄是最大的遺憾...',
-        'fortune_hook': '🔮 想知道還需要堅持多久？如何保持動力？',
-        'advice': '堅持不懈，持之以恆。成功屬於能堅持到最後的人。'
-    },
-    '46': {
-        'aspect': '吉',
-        'brief': '困難消解，否極泰來',
-        'story': '解，利西南，無所往，其來復吉。此卦象徵解脫與釋放，困擾您的問題正在消解。',
-        'fortune': '近期將感受到一種「解脫感」，壓力釋放、問題解決。一段艱難的時期即將結束...',
-        'fortune_hook': '🔮 想知道問題如何被解決？解脫之後該往哪走？',
-        'advice': '放下包袱，輕裝前行。過去的已經過去。'
-    },
-    '47': {
-        'aspect': '小心',
-        'brief': '小事謹慎，不宜躁進',
-        'story': '小過，亨，利貞。可小事，不可大事。此卦提醒您：小地方的疏忽可能導致大問題。',
-        'fortune': '近期在細節上要特別注意，一個小錯誤可能引發連鎖反應。檢查那些您覺得「應該沒問題」的地方...',
-        'fortune_hook': '🔮 想知道該注意哪些細節？如何避免小錯誤？',
-        'advice': '謹小慎微，穩紮穩打。魔鬼藏在細節裡。'
-    },
-    '48': {
-        'aspect': '吉',
-        'brief': '安樂順遂，享受當下',
-        'story': '豫，利建侯行師。此卦是愉悅之象，象徵順遂與享受。這是一段可以稍微放鬆的時光。',
-        'fortune': '近期適合享受生活，參與一些娛樂活動。一個讓您開心的事情即將發生...',
-        'fortune_hook': '🔮 想知道這個開心的事是什麼？如何讓愉悅持續更久？',
-        'advice': '享受當下，適度娛樂。人生需要張弛有度。'
-    },
-    '51': {
-        'aspect': '吉',
-        'brief': '積少成多，穩健前行',
-        'story': '小畜，亨。密雲不雨，自我西郊。此卦如同細雨潤物，小的積累終將帶來大的成果。',
-        'fortune': '近期可能感覺進展緩慢，但不要急躁。每一個小進步都在為大突破做準備...',
-        'fortune_hook': '🔮 想知道突破何時到來？該如何加速積累？',
-        'advice': '腳踏實地，積少成多。不積跬步，無以至千里。'
-    },
-    '52': {
-        'aspect': '吉',
-        'brief': '誠信為本，心靈相通',
-        'story': '中孚，豚魚吉，利涉大川。此卦強調誠信的力量，真誠的心可以感動一切。',
-        'fortune': '近期您的真誠將得到回報，有人會因為您的誠信而給予信任或機會...',
-        'fortune_hook': '🔮 想知道誰會信任您？這份信任會帶來什麼？',
-        'advice': '以誠待人，言行一致。誠信是最好的名片。'
-    },
-    '53': {
-        'aspect': '吉',
-        'brief': '家庭和睦，親情融洽',
-        'story': '家人，利女貞。此卦關乎家庭與親密關係，強調內部和諧的重要性。',
-        'fortune': '近期家庭運勢良好，適合處理家務事或加強與家人的連結。一個家庭相關的好消息可能傳來...',
-        'fortune_hook': '🔮 想知道這個好消息是什麼？如何讓家庭更和諧？',
-        'advice': '珍惜家人，維護和諧。家和萬事興。'
-    },
-    '54': {
-        'aspect': '吉',
-        'brief': '利人利己，互惠共贏',
-        'story': '益，利有攸往，利涉大川。此卦象徵增益與助人，您給出去的，會以另一種形式回來。',
-        'fortune': '近期是助人的好時機，您的善意將帶來意想不到的回報。一個需要您幫助的人可能出現...',
-        'fortune_hook': '🔮 想知道該幫助誰？回報會以什麼形式出現？',
-        'advice': '樂於助人，廣結善緣。施比受更有福。'
-    },
-    '55': {
-        'aspect': '平',
-        'brief': '柔順處世，以柔克剛',
-        'story': '巽，小亨，利有攸往，利見大人。此卦象徵風的特性：柔順但無處不入。',
-        'fortune': '近期適合採取柔性策略，硬碰硬可能適得其反。有時候退讓反而能達成目標...',
-        'fortune_hook': '🔮 想知道該如何「以柔克剛」？在哪裡該退讓？',
-        'advice': '謙遜低調，柔能克剛。水善利萬物而不爭。'
-    },
-    '56': {
-        'aspect': '小心',
-        'brief': '渙散之象，收心聚力',
-        'story': '渙，亨。王假有廟。此卦提醒您注意分散的風險，無論是注意力、資源還是關係。',
-        'fortune': '近期可能感到有些散亂，精力被分散在太多事情上。需要重新聚焦，找回核心...',
-        'fortune_hook': '🔮 想知道該聚焦在什麼上？如何重整旗鼓？',
-        'advice': '收心聚力，專注核心。分散是效率的敵人。'
-    },
-    '57': {
-        'aspect': '吉',
-        'brief': '循序漸進，水到渠成',
-        'story': '漸，女歸吉，利貞。此卦如同樹木生長，強調自然節奏的重要性。',
-        'fortune': '近期適合按部就班地推進，急於求成反而會出問題。該來的會來，時機成熟自然會結果...',
-        'fortune_hook': '🔮 想知道時機何時成熟？如何判斷是否該加速？',
-        'advice': '按部就班，穩步前行。欲速則不達。'
-    },
-    '58': {
-        'aspect': '平',
-        'brief': '觀察形勢，靜待時機',
-        'story': '觀，盥而不薦，有孚顒若。此卦強調觀察的智慧，先看清楚再行動。',
-        'fortune': '近期適合多觀察、少行動。形勢還不明朗，過早出手可能判斷失誤...',
-        'fortune_hook': '🔮 想知道該觀察什麼？何時才是行動的信號？',
-        'advice': '多看少動，審時度勢。靜觀其變，後發制人。'
-    },
-    '61': {
-        'aspect': '平',
-        'brief': '耐心等待，時機將至',
-        'story': '需，有孚，光亨貞吉，利涉大川。此卦如同等待雨水的禾苗，強調等待的智慧。',
-        'fortune': '近期您等待的事情需要再耐心一些，條件還沒完全具備。但好消息是：它一定會來...',
-        'fortune_hook': '🔮 想知道還要等多久？等待期間該做什麼準備？',
-        'advice': '耐心等待，做好準備。機會總是留給有準備的人。'
-    },
-    '62': {
-        'aspect': '平',
-        'brief': '適可而止，把握分寸',
-        'story': '節，亨。苦節不可貞。此卦提醒您凡事要有度，知道何時該停是一種智慧。',
-        'fortune': '近期注意把握「度」的問題，無論是花費、付出還是期待。過猶不及...',
-        'fortune_hook': '🔮 想知道哪裡該節制？如何找到最佳平衡點？',
-        'advice': '適度節制，恰到好處。過度的任何東西都會變成負擔。'
-    },
-    '63': {
-        'aspect': '大吉',
-        'brief': '大功告成，圓滿完成',
-        'story': '既濟，亨小，利貞。初吉終亂。此卦象徵完成與圓滿，您的努力終於開花結果。',
-        'fortune': '近期將迎來一個圓滿的結局，一件事情將告一段落。但記住：完成不是終點，而是新的起點...',
-        'fortune_hook': '🔮 想知道下一個目標該是什麼？如何保持這波好運？',
-        'advice': '善始善終，再創新高。一個結束是另一個開始。'
-    },
-    '64': {
-        'aspect': '平',
-        'brief': '萬事開頭，奠定基礎',
-        'story': '屯，元亨利貞，勿用有攸往，利建侯。此卦如同破土而出的種子，代表新的開始。',
-        'fortune': '近期可能開始一個新項目或進入新階段，開頭雖難，但只要根基穩固，後續就會順利...',
-        'fortune_hook': '🔮 想知道如何打好基礎？開頭該注意什麼？',
-        'advice': '穩紮穩打，奠定基礎。好的開始是成功的一半。'
-    },
-    '65': {
-        'aspect': '吉',
-        'brief': '涵養積累，厚積薄發',
-        'story': '井，改邑不改井。此卦如同深井，象徵內在的涵養與積累。',
-        'fortune': '近期適合充實自己，學習新技能或積累資源。現在的積累會成為未來的資本...',
-        'fortune_hook': '🔮 想知道該學習什麼？積累的資源何時能派上用場？',
-        'advice': '充實內在，積蓄能量。厚積才能薄發。'
-    },
-    '66': {
-        'aspect': '凶',
-        'brief': '險阻在前，謹慎應對',
-        'story': '坎，有孚維心亨，行有尚。此卦象徵水的險惡，提醒您前方有坎坷。',
-        'fortune': '近期可能遇到一些困難或阻礙，看起來有些棘手。但只要保持冷靜，一定能找到出路...',
-        'fortune_hook': '🔮 想知道困難具體是什麼？如何安全度過？',
-        'advice': '謹慎行事，保持冷靜。沒有過不去的坎。'
-    },
-    '67': {
-        'aspect': '凶',
-        'brief': '道路艱難，迂迴前進',
-        'story': '蹇，利西南，不利東北，利見大人，貞吉。此卦象徵行路艱難，但有方法可解。',
-        'fortune': '近期前進的道路不太順暢，可能需要繞路而行。直線不通，曲線也是一種智慧...',
-        'fortune_hook': '🔮 想知道該繞向哪個方向？誰能幫您指路？',
-        'advice': '靈活變通，迂迴前進。條條大路通羅馬。'
-    },
-    '68': {
-        'aspect': '吉',
-        'brief': '親善合作，貴人相助',
-        'story': '比，吉。原筮元永貞，無咎。此卦象徵親近與合作，您不是孤軍奮戰。',
-        'fortune': '近期將獲得他人的支持，可能是貴人相助或團隊合作。接受幫助不是軟弱...',
-        'fortune_hook': '🔮 想知道貴人是誰？該如何建立這份連結？',
-        'advice': '廣結善緣，接受幫助。眾人拾柴火焰高。'
-    },
-    '71': {
-        'aspect': '吉',
-        'brief': '蓄勢待發，大器晚成',
-        'story': '大畜，利貞，不家食吉，利涉大川。此卦象徵大的積蓄，能量正在累積。',
-        'fortune': '近期您的能量和資源正在持續累積，雖然還沒到爆發的時刻，但時機很快就會成熟...',
-        'fortune_hook': '🔮 想知道爆發點何時到來？如何最大化累積的效果？',
-        'advice': '繼續積蓄，等待時機。大器晚成，後來居上。'
-    },
-    '72': {
-        'aspect': '平',
-        'brief': '有捨有得，以退為進',
-        'story': '損，有孚，元吉，無咎可貞。此卦提醒您：有時候減少反而是增加。',
-        'fortune': '近期可能需要做出一些取捨，放棄某些東西來獲得更重要的。這是值得的交換...',
-        'fortune_hook': '🔮 想知道該放棄什麼？能換來什麼？',
-        'advice': '適當割捨，輕裝前行。捨得捨得，有捨才有得。'
-    },
-    '73': {
-        'aspect': '平',
-        'brief': '修飾外表，內外兼修',
-        'story': '賁，亨，小利有攸往。此卦象徵修飾與美化，提醒您內外要兼顧。',
-        'fortune': '近期注意自己的形象和表達，外在的改變可能帶來新的機會。但別忘了內在的修養...',
-        'fortune_hook': '🔮 想知道該如何改變形象？哪些方面需要加強？',
-        'advice': '內外兼修，表裡如一。外表是內心的鏡子。'
-    },
-    '74': {
-        'aspect': '吉',
-        'brief': '頤養身心，修身養性',
-        'story': '頤，貞吉，觀頤，自求口實。此卦關乎滋養與照顧，提醒您照顧好自己。',
-        'fortune': '近期適合調養身心，注意飲食和休息。身體發出的信號不要忽視...',
-        'fortune_hook': '🔮 想知道身體哪些方面需要注意？如何更好地調養？',
-        'advice': '照顧身體，滋養心靈。身體是革命的本錢。'
-    },
-    '75': {
-        'aspect': '平',
-        'brief': '撥亂反正，整頓問題',
-        'story': '蠱，元亨，利涉大川，先甲三日，後甲三日。此卦象徵整頓積弊，是時候處理那些遺留問題了。',
-        'fortune': '近期適合解決一些積壓已久的問題，拖延只會讓情況更糟。面對它，處理它...',
-        'fortune_hook': '🔮 想知道最該優先處理什麼？如何有效解決？',
-        'advice': '直面問題，徹底解決。拖延是問題的養分。'
-    },
-    '76': {
-        'aspect': '吉',
-        'brief': '虛心學習，啟蒙成長',
-        'story': '蒙，亨。匪我求童蒙，童蒙求我。此卦象徵學習與啟蒙，保持學習的心態。',
-        'fortune': '近期可能遇到學習的機會或遇見能指導您的人。保持謙虛，您會獲得重要的知識...',
-        'fortune_hook': '🔮 想知道該學習什麼？誰會是您的指路人？',
-        'advice': '保持謙遜，虛心學習。學無止境，活到老學到老。'
-    },
-    '77': {
-        'aspect': '平',
-        'brief': '止而不妄，靜待良機',
-        'story': '艮，艮其背，不獲其身。此卦象徵停止與等待，有時候不動是最好的行動。',
-        'fortune': '近期不適合大動作，維持現狀反而是最佳策略。時機未到，強行出擊會適得其反...',
-        'fortune_hook': '🔮 想知道該等到什麼時候？在等待期間該做什麼？',
-        'advice': '按兵不動，靜待時機。動不如靜，多不如少。'
-    },
-    '78': {
-        'aspect': '小心',
-        'brief': '暫時蟄伏，保存實力',
-        'story': '剝，不利有攸往。此卦提醒您：現在是收縮的時候，不宜擴張。',
-        'fortune': '近期運勢處於低谷期，要做好過冬的準備。減少不必要的消耗，保存核心實力...',
-        'fortune_hook': '🔮 想知道低潮期多久？該保留什麼、放棄什麼？',
-        'advice': '韜光養晦，保存實力。冬天之後一定是春天。'
-    },
-    '81': {
-        'aspect': '大吉',
-        'brief': '天地交泰，萬事亨通',
-        'story': '泰，小往大來，吉亨。此卦是最吉祥的卦象之一，天地相交，萬物通泰。',
-        'fortune': '近期您將迎來極為順遂的時期，各方面都會有好的發展。貴人、機遇都在向您靠近...',
-        'fortune_hook': '🔮 想知道好運會持續多久？如何讓它最大化？',
-        'advice': '把握時機，大膽行動。天時地利人和，正是此時。'
-    },
-    '82': {
-        'aspect': '吉',
-        'brief': '親臨督導，以身作則',
-        'story': '臨，元亨利貞，至于八月有凶。此卦象徵親自參與和督導的重要性。',
-        'fortune': '近期需要您親自出馬的事情會增多，您的親自參與會帶來不同的結果...',
-        'fortune_hook': '🔮 想知道哪些事需要親自處理？如何有效管理時間？',
-        'advice': '身先士卒，親力親為。榜樣的力量是無窮的。'
-    },
-    '83': {
-        'aspect': '小心',
-        'brief': '光明隱晦，蟄伏待機',
-        'story': '明夷，利艱貞。此卦如同日落之象，光明暫時被遮蔽，但太陽終會再升起。',
-        'fortune': '近期可能感覺不太順，才華得不到施展。但這是黎明前的黑暗，繼續蓄積能量...',
-        'fortune_hook': '🔮 想知道光明何時重現？如何在黑暗中保持希望？',
-        'advice': '韜光養晦，保持信心。黑夜終將過去，黎明終將來臨。'
-    },
-    '84': {
-        'aspect': '吉',
-        'brief': '否極泰來，一陽復始',
-        'story': '復，亨。出入無疾，朋來無咎。此卦象徵轉機與新生，最黑暗之後就是光明。',
-        'fortune': '近期您將走出困境，迎來轉機。之前的付出沒有白費，收穫即將來臨...',
-        'fortune_hook': '🔮 想知道轉機會以什麼形式出現？如何把握？',
-        'advice': '堅持信念，迎接曙光。冬天來了，春天還會遠嗎？'
-    },
-    '85': {
-        'aspect': '吉',
-        'brief': '穩步上升，蒸蒸日上',
-        'story': '升，元亨，用見大人，勿恤。此卦如同植物向上生長，象徵穩定的上升。',
-        'fortune': '近期您的運勢正在穩步上升，可能在職場、學業或其他方面獲得晉升...',
-        'fortune_hook': '🔮 想知道能升到什麼高度？需要注意什麼？',
-        'advice': '持續努力，穩健前進。每天進步一點點，終將到達頂峰。'
-    },
-    '86': {
-        'aspect': '吉',
-        'brief': '統御有方，眾望所歸',
-        'story': '師，貞丈人吉，無咎。此卦象徵領導與團隊，您可能被賦予領導的責任。',
-        'fortune': '近期可能需要承擔領導角色或帶領團隊。眾人期待您的指引...',
-        'fortune_hook': '🔮 想知道如何成為好的領導？該帶領團隊往哪走？',
-        'advice': '以德服人，凝聚人心。好的領導者是服務者。'
-    },
-    '87': {
-        'aspect': '大吉',
-        'brief': '謙虛為懷，福報無窮',
-        'story': '謙，亨，君子有終。此卦是易經中唯一六爻皆吉的卦，謙虛的力量超乎想像。',
-        'fortune': '近期保持謙虛的態度會帶來意想不到的好運，您的低調反而會吸引更多人的認可...',
-        'fortune_hook': '🔮 想知道好運會以什麼形式出現？如何保持謙虛？',
-        'advice': '謙受益，滿招損。越是有能力，越要懂得謙虛。'
-    },
-    '88': {
-        'aspect': '吉',
-        'brief': '厚德載物，包容萬象',
-        'story': '坤，元亨，利牝馬之貞。此卦如同大地，象徵包容與承載的力量。',
-        'fortune': '近期適合以包容的心態面對一切，接納不同的人和觀點會為您帶來意想不到的收穫...',
-        'fortune_hook': '🔮 想知道該包容什麼？這份包容會帶來什麼？',
-        'advice': '包容萬物，厚德載物。海納百川，有容乃大。'
-    }
+    '11': {'aspect': '大吉', 'brief': '龍騰九天，乾坤在握', 'story': '天行健，君子以自強不息。此卦如日中天，正是大展宏圖之時。您的能量正處於巔峰狀態，無論事業、感情或財運都將迎來突破。', 'fortune': '近七日內將有意想不到的好消息傳來，可能與一位貴人有關。把握住這波運勢，主動出擊將事半功倍...', 'fortune_hook': '🔮 想知道貴人是誰？如何把握這波運勢的最佳時機？', 'advice': '宜積極進取，大膽行動。此時猶豫不決反而錯失良機。'},
+    '12': {'aspect': '小心', 'brief': '如履薄冰，步步為營', 'story': '履虎尾，不咥人，亨。此卦提醒您正行走在微妙的處境中，看似平靜的表面下暗藏玄機。但只要謹慎行事，終能化險為夷。', 'fortune': '近期可能面臨一個需要抉擇的情況，表面上的好選擇未必是正確答案。有人在暗中觀察您的反應...', 'fortune_hook': '🔮 想知道該如何識破迷局？哪個選擇才是正確的？', 'advice': '謹言慎行，三思後行。遇事多觀察，少表態。'},
+    '13': {'aspect': '吉', 'brief': '志同道合，眾志成城', 'story': '同人于野，亨。此卦象徵人際關係的和諧與合作的力量。您身邊正聚集著與您理念相近的人，這是難得的機緣。', 'fortune': '近期將遇到一位與您「頻率相同」的人，可能在意想不到的場合。這段關係將為您帶來重要的轉變...', 'fortune_hook': '🔮 想知道這個人會在哪裡出現？如何識別他/她？', 'advice': '廣結善緣，真誠待人。合作比單打獨鬥更有力量。'},
+    '14': {'aspect': '吉', 'brief': '天道無妄，誠者自通', 'story': '無妄，元亨利貞。此卦告訴您：保持真誠，不妄作為，天道自然會眷顧。近期發生的事情都有其深意，順其自然反而是最好的策略。', 'fortune': '一件看似「意外」的事情正在醞釀，但這其實是宇宙的安排。表面的阻礙實際上是在保護您...', 'fortune_hook': '🔮 想知道這個「意外」是什麼？如何將它轉化為機遇？', 'advice': '保持真誠，順應天時。不強求，不妄動。'},
+    '15': {'aspect': '平', 'brief': '邂逅姻緣，隨緣應變', 'story': '姤，女壯，勿用取女。此卦暗示意外的相遇，可能帶來新的機會或關係。但需要慧眼識人，不被表象迷惑。', 'fortune': '近期會有一個「突然出現」的人或機會，看起來很誘人。但第一印象可能有所偏差...', 'fortune_hook': '🔮 想知道如何辨別真偽？這個機會該不該把握？', 'advice': '保持警覺，觀察為主。不要被一時的熱情沖昏頭。'},
+    '16': {'aspect': '凶', 'brief': '爭訟之象，退一步海闊天空', 'story': '訟，有孚窒惕，中吉，終凶。此卦警示您正處於或即將進入一個爭端的處境。贏了道理，可能輸了更多。', 'fortune': '近期要特別注意人際關係中的暗流。有人可能對您心存不滿，或者一場誤會正在發酵...', 'fortune_hook': '🔮 想知道是誰在背後？如何化解這場危機？', 'advice': '忍讓為上，和解為貴。爭一時不如謀長遠。'},
+    '17': {'aspect': '平', 'brief': '韜光養晦，以退為進', 'story': '遯，亨，小利貞。此卦如同智者的戰略性撤退，暫時的隱忍是為了更好的出擊。現在不是正面對抗的時機。', 'fortune': '近期您可能感到某些事情「不對勁」，這種直覺是對的。暫時的退讓會為您保存實力...', 'fortune_hook': '🔮 想知道該退到什麼程度？何時才是反攻的時機？', 'advice': '避其鋒芒，保存實力。蟄伏是為了更好的騰飛。'},
+    '18': {'aspect': '凶', 'brief': '天地閉塞，靜待春來', 'story': '否之匪人，不利君子貞。此卦象徵暫時的阻滯，上下不通、內外不和。但請記住：否極泰來，黑暗之後必是黎明。', 'fortune': '近期可能感到事事不順，溝通不暢。但這是黎明前的黑暗，一個重要的轉折點即將來臨...', 'fortune_hook': '🔮 想知道轉機何時出現？如何度過這段低潮期？', 'advice': '靜待時機，不宜強求。養精蓄銳，準備迎接轉機。'},
+    '21': {'aspect': '吉', 'brief': '果敢決斷，勇往直前', 'story': '夬，揚于王庭。此卦如同破曉的陽光，衝破黑暗。是時候做出那個您一直猶豫的決定了。', 'fortune': '近期有一件事需要您「當機立斷」，過多的猶豫反而會錯失良機。答案其實已在您心中...', 'fortune_hook': '🔮 想知道應該選擇哪個方向？最佳決策時機是何時？', 'advice': '當斷則斷，展現魄力。猶豫不決是最大的風險。'},
+    '22': {'aspect': '吉', 'brief': '和悅之象，喜樂盈門', 'story': '兌，亨利貞。此卦如同春風拂面，帶來愉悅與和諧。您的磁場正在吸引美好的人事物。', 'fortune': '近期將有令您開心的消息，可能來自朋友的邀約或一個期待已久的結果。笑容是您最好的開運符...', 'fortune_hook': '🔮 想知道這個好消息具體是什麼？如何讓喜悅加倍？', 'advice': '保持愉悅，廣結人緣。好心情會帶來好運氣。'},
+    '23': {'aspect': '平', 'brief': '除舊布新，蛻變重生', 'story': '革，己日乃孚。此卦如同蝴蝶破繭，象徵重大的轉變。改變雖然不易，但這正是您需要的蛻變。', 'fortune': '近期您的生活可能面臨一些變化，也許是主動的，也許是被動的。這個變化看似動盪，實則是新生...', 'fortune_hook': '🔮 想知道該如何順利度過轉變期？變化後會更好嗎？', 'advice': '勇於改變，擁抱新局。蛻變是成長的必經之路。'},
+    '24': {'aspect': '吉', 'brief': '隨機應變，順勢而為', 'story': '隨，元亨利貞，無咎。此卦告訴您：識時務者為俊傑。能夠靈活應變的人，才能在變化中找到機會。', 'fortune': '近期環境可能有所變化，但這恰恰是您展現應變能力的機會。有人正在觀察您如何處理變局...', 'fortune_hook': '🔮 想知道應該跟隨什麼趨勢？如何在變化中勝出？', 'advice': '靈活變通，順勢而為。僵化固執只會被淘汰。'},
+    '25': {'aspect': '小心', 'brief': '過猶不及，適可而止', 'story': '大過，棟撓，利有攸往，亨。此卦警示您：再好的事情，過度了也會變成負擔。知道何時停下來，是一種智慧。', 'fortune': '近期您可能在某件事上投入過多，無論是精力、金錢還是感情。過度的付出可能帶來反效果...', 'fortune_hook': '🔮 想知道具體是哪方面過度了？如何找回平衡？', 'advice': '量力而行，適可而止。過度的熱情可能燒傷自己。'},
+    '26': {'aspect': '凶', 'brief': '身陷困境，守正待援', 'story': '困，亨，貞大人吉。此卦如同困獸之鬥，但請記住：真正的勇者，是在困境中依然保持希望的人。', 'fortune': '近期可能遇到一些阻礙，感覺四處碰壁。但這個困境中藏著一個轉機，只有冷靜下來才能發現...', 'fortune_hook': '🔮 想知道突破口在哪裡？誰能幫您走出困境？', 'advice': '堅守正道，保持信心。困境是暫時的，成長是永恆的。'},
+    '27': {'aspect': '吉', 'brief': '心有靈犀，感應相通', 'story': '咸，亨利貞，取女吉。此卦是感應之卦，象徵心靈的相通與情感的連結。您與某人或某事之間存在著微妙的緣分。', 'fortune': '近期您會感受到一種「說不清的連結」，可能是對某人、某地或某個想法。這種直覺是真實的...', 'fortune_hook': '🔮 想知道這個連結指向什麼？如何加深這份感應？', 'advice': '敞開心扉，感受連結。真誠的能量會吸引相同的頻率。'},
+    '28': {'aspect': '吉', 'brief': '眾緣和合，聚沙成塔', 'story': '萃，亨。王假有廟。此卦象徵聚集與凝聚，眾人的力量匯聚在一起，可以成就大事。', 'fortune': '近期是拓展人脈、建立團隊的好時機。一群人正在向您靠近，或者您正被邀請加入某個圈子...', 'fortune_hook': '🔮 想知道該加入哪個圈子？如何識別真正的夥伴？', 'advice': '團結合作，凝聚力量。一個人走得快，一群人走得遠。'},
+    '31': {'aspect': '大吉', 'brief': '大有斬獲，前程似錦', 'story': '大有，元亨。此卦是豐收之象，您之前的付出將得到豐厚的回報。這是值得慶祝的時刻。', 'fortune': '近期將有意想不到的收穫，可能是物質上的，也可能是精神上的。一個機會正在向您敞開大門...', 'fortune_hook': '🔮 想知道這個機會在哪個領域？如何最大化這波收穫？', 'advice': '把握機遇，大展宏圖。好運來臨時，要有準備接住它的能力。'},
+    '32': {'aspect': '平', 'brief': '觀點分歧，各執己見', 'story': '睽，小事吉。此卦象徵差異與分離，但差異不一定是壞事。有時候，不同的視角能帶來新的發現。', 'fortune': '近期可能與某人產生意見分歧，表面上看是衝突，實際上可能是一個重新認識彼此的機會...', 'fortune_hook': '🔮 想知道如何化解分歧？這段關係還有轉圜的餘地嗎？', 'advice': '求同存異，理解差異。每個人都有自己的視角。'},
+    '33': {'aspect': '吉', 'brief': '光明正大，文采煥發', 'story': '離，利貞，亨。此卦如同正午的太陽，光芒萬丈。這是展現自己、綻放光芒的時刻。', 'fortune': '近期您的才華將得到展示的機會，無論是在工作還是生活中。有人正等著被您的光芒吸引...', 'fortune_hook': '🔮 想知道該展現哪方面的才華？這個舞台在哪裡？', 'advice': '展現自信，散發光芒。不要害怕成為焦點。'},
+    '34': {'aspect': '吉', 'brief': '撥雲見日，障礙消除', 'story': '噬嗑，亨，利用獄。此卦象徵咬碎障礙，排除阻礙。那些困擾您的問題，終於要解決了。', 'fortune': '近期一個懸而未決的問題將獲得解答。可能需要一些果斷的行動，但結果會是好的...', 'fortune_hook': '🔮 想知道該採取什麼行動？解決問題的關鍵是什麼？', 'advice': '果斷行動，排除障礙。問題不會自己消失，但會被解決。'},
+    '35': {'aspect': '吉', 'brief': '鼎新革故，創造新局', 'story': '鼎，元吉，亨。此卦如同烹煮美食的鼎，象徵轉化與創新。舊的養分將轉化為新的能量。', 'fortune': '近期是創新的好時機，一個新的想法或項目正在您心中醞釀。這個「新東西」可能改變您的軌道...', 'fortune_hook': '🔮 想知道這個創新該往哪個方向發展？需要哪些資源？', 'advice': '創新突破，轉化升級。不破不立，大破大立。'},
+    '36': {'aspect': '平', 'brief': '功敗垂成，再接再厲', 'story': '未濟，亨，小狐汔濟，濡其尾，無攸利。此卦提醒您：雖然接近終點，但最後一哩路往往最難走。', 'fortune': '近期某件事看似即將完成，但可能出現小變數。不要在最後關頭鬆懈...', 'fortune_hook': '🔮 想知道變數可能出現在哪裡？如何確保完美收官？', 'advice': '堅持到底，不要鬆懈。行百里者半九十。'},
+    '37': {'aspect': '平', 'brief': '旅途在外，隨遇而安', 'story': '旅，小亨，旅貞吉。此卦象徵旅行與漂泊，在不熟悉的環境中尋找方向。', 'fortune': '近期可能有出行的機會，或者在某個「陌生領域」探索。這段旅程會帶給您意想不到的收穫...', 'fortune_hook': '🔮 想知道該往哪個方向去？旅途中會遇到什麼人？', 'advice': '入境隨俗，保持彈性。旅行是最好的學習。'},
+    '38': {'aspect': '吉', 'brief': '步步高升，前程似錦', 'story': '晉，康侯用錫馬蕃庶，晝日三接。此卦如同旭日東升，步步向上。您的努力即將得到認可。', 'fortune': '近期將有晉升或進步的機會，無論是職位、能力還是聲望。有人正在關注您的表現...', 'fortune_hook': '🔮 想知道機會何時降臨？該如何表現才能脫穎而出？', 'advice': '穩健前進，展現實力。機會是給準備好的人。'},
+    '41': {'aspect': '大吉', 'brief': '氣勢如虹，大有可為', 'story': '大壯，利貞。此卦如同春雷震天，氣勢正盛。這是您最有力量的時刻。', 'fortune': '近期您的能量將達到高峰，無論做什麼都會事半功倍。一個大展身手的舞台正在等著您...', 'fortune_hook': '🔮 想知道該如何運用這股力量？在哪個領域突破？', 'advice': '乘勝追擊，大膽行動。力量巔峰時，就是出擊時。'},
+    '42': {'aspect': '吉', 'brief': '姻緣和合，情感順遂', 'story': '歸妹，征凶，無攸利。此卦與情感關係密切，象徵著緣分的牽引與歸屬。', 'fortune': '近期感情方面可能有新的發展，單身者有望遇到有緣人，有伴侶者關係可能更進一步...', 'fortune_hook': '🔮 想知道緣分何時到來？對方是什麼樣的人？', 'advice': '珍惜緣分，真誠相待。緣分天注定，但幸福靠經營。'},
+    '43': {'aspect': '大吉', 'brief': '豐盛圓滿，鼎盛時期', 'story': '豐，亨，王假之，勿憂，宜日中。此卦是極致的豐盛之象，如同正午的太陽最為燦爛。', 'fortune': '近期是您的高光時刻，各方面都將達到頂峰。但請記住：盛極必衰，要懂得在高處為低潮做準備...', 'fortune_hook': '🔮 想知道如何延長這波好運？該提前做哪些準備？', 'advice': '居安思危，未雨綢繆。最好的時候，要想到最壞的可能。'},
+    '44': {'aspect': '平', 'brief': '警醒振作，蓄勢待發', 'story': '震，亨。震來虩虩，笑言啞啞。此卦如同雷聲隆隆，既是警示也是喚醒。', 'fortune': '近期可能遇到一些「震動」，這些震動是在提醒您某些被忽略的事情。驚醒之後，就是行動...', 'fortune_hook': '🔮 想知道這個警示是關於什麼？該如何應對？', 'advice': '提高警覺，保持清醒。震動是宇宙的提醒。'},
+    '45': {'aspect': '吉', 'brief': '持之以恆，終有所成', 'story': '恆，亨，無咎，利貞。此卦強調恆久之道，堅持的力量超乎想像。', 'fortune': '您正在做的某件事，需要再堅持一段時間。勝利已經在望，放棄是最大的遺憾...', 'fortune_hook': '🔮 想知道還需要堅持多久？如何保持動力？', 'advice': '堅持不懈，持之以恆。成功屬於能堅持到最後的人。'},
+    '46': {'aspect': '吉', 'brief': '困難消解，否極泰來', 'story': '解，利西南，無所往，其來復吉。此卦象徵解脫與釋放，困擾您的問題正在消解。', 'fortune': '近期將感受到一種「解脫感」，壓力釋放、問題解決。一段艱難的時期即將結束...', 'fortune_hook': '🔮 想知道問題如何被解決？解脫之後該往哪走？', 'advice': '放下包袱，輕裝前行。過去的已經過去。'},
+    '47': {'aspect': '小心', 'brief': '小事謹慎，不宜躁進', 'story': '小過，亨，利貞。可小事，不可大事。此卦提醒您：小地方的疏忽可能導致大問題。', 'fortune': '近期在細節上要特別注意，一個小錯誤可能引發連鎖反應。檢查那些您覺得「應該沒問題」的地方...', 'fortune_hook': '🔮 想知道該注意哪些細節？如何避免小錯誤？', 'advice': '謹小慎微，穩紮穩打。魔鬼藏在細節裡。'},
+    '48': {'aspect': '吉', 'brief': '安樂順遂，享受當下', 'story': '豫，利建侯行師。此卦是愉悅之象，象徵順遂與享受。這是一段可以稍微放鬆的時光。', 'fortune': '近期適合享受生活，參與一些娛樂活動。一個讓您開心的事情即將發生...', 'fortune_hook': '🔮 想知道這個開心的事是什麼？如何讓愉悅持續更久？', 'advice': '享受當下，適度娛樂。人生需要張弛有度。'},
+    '51': {'aspect': '吉', 'brief': '積少成多，穩健前行', 'story': '小畜，亨。密雲不雨，自我西郊。此卦如同細雨潤物，小的積累終將帶來大的成果。', 'fortune': '近期可能感覺進展緩慢，但不要急躁。每一個小進步都在為大突破做準備...', 'fortune_hook': '🔮 想知道突破何時到來？該如何加速積累？', 'advice': '腳踏實地，積少成多。不積跬步，無以至千里。'},
+    '52': {'aspect': '吉', 'brief': '誠信為本，心靈相通', 'story': '中孚，豚魚吉，利涉大川。此卦強調誠信的力量，真誠的心可以感動一切。', 'fortune': '近期您的真誠將得到回報，有人會因為您的誠信而給予信任或機會...', 'fortune_hook': '🔮 想知道誰會信任您？這份信任會帶來什麼？', 'advice': '以誠待人，言行一致。誠信是最好的名片。'},
+    '53': {'aspect': '吉', 'brief': '家庭和睦，親情融洽', 'story': '家人，利女貞。此卦關乎家庭與親密關係，強調內部和諧的重要性。', 'fortune': '近期家庭運勢良好，適合處理家務事或加強與家人的連結。一個家庭相關的好消息可能傳來...', 'fortune_hook': '🔮 想知道這個好消息是什麼？如何讓家庭更和諧？', 'advice': '珍惜家人，維護和諧。家和萬事興。'},
+    '54': {'aspect': '吉', 'brief': '利人利己，互惠共贏', 'story': '益，利有攸往，利涉大川。此卦象徵增益與助人，您給出去的，會以另一種形式回來。', 'fortune': '近期是助人的好時機，您的善意將帶來意想不到的回報。一個需要您幫助的人可能出現...', 'fortune_hook': '🔮 想知道該幫助誰？回報會以什麼形式出現？', 'advice': '樂於助人，廣結善緣。施比受更有福。'},
+    '55': {'aspect': '平', 'brief': '柔順處世，以柔克剛', 'story': '巽，小亨，利有攸往，利見大人。此卦象徵風的特性：柔順但無處不入。', 'fortune': '近期適合採取柔性策略，硬碰硬可能適得其反。有時候退讓反而能達成目標...', 'fortune_hook': '🔮 想知道該如何「以柔克剛」？在哪裡該退讓？', 'advice': '謙遜低調，柔能克剛。水善利萬物而不爭。'},
+    '56': {'aspect': '小心', 'brief': '渙散之象，收心聚力', 'story': '渙，亨。王假有廟。此卦提醒您注意分散的風險，無論是注意力、資源還是關係。', 'fortune': '近期可能感到有些散亂，精力被分散在太多事情上。需要重新聚焦，找回核心...', 'fortune_hook': '🔮 想知道該聚焦在什麼上？如何重整旗鼓？', 'advice': '收心聚力，專注核心。分散是效率的敵人。'},
+    '57': {'aspect': '吉', 'brief': '循序漸進，水到渠成', 'story': '漸，女歸吉，利貞。此卦如同樹木生長，強調自然節奏的重要性。', 'fortune': '近期適合按部就班地推進，急於求成反而會出問題。該來的會來，時機成熟自然會結果...', 'fortune_hook': '🔮 想知道時機何時成熟？如何判斷是否該加速？', 'advice': '按部就班，穩步前行。欲速則不達。'},
+    '58': {'aspect': '平', 'brief': '觀察形勢，靜待時機', 'story': '觀，盥而不薦，有孚顒若。此卦強調觀察的智慧，先看清楚再行動。', 'fortune': '近期適合多觀察、少行動。形勢還不明朗，過早出手可能判斷失誤...', 'fortune_hook': '🔮 想知道該觀察什麼？何時才是行動的信號？', 'advice': '多看少動，審時度勢。靜觀其變，後發制人。'},
+    '61': {'aspect': '平', 'brief': '耐心等待，時機將至', 'story': '需，有孚，光亨貞吉，利涉大川。此卦如同等待雨水的禾苗，強調等待的智慧。', 'fortune': '近期您等待的事情需要再耐心一些，條件還沒完全具備。但好消息是：它一定會來...', 'fortune_hook': '🔮 想知道還要等多久？等待期間該做什麼準備？', 'advice': '耐心等待，做好準備。機會總是留給有準備的人。'},
+    '62': {'aspect': '平', 'brief': '適可而止，把握分寸', 'story': '節，亨。苦節不可貞。此卦提醒您凡事要有度，知道何時該停是一種智慧。', 'fortune': '近期注意把握「度」的問題，無論是花費、付出還是期待。過猶不及...', 'fortune_hook': '🔮 想知道哪裡該節制？如何找到最佳平衡點？', 'advice': '適度節制，恰到好處。過度的任何東西都會變成負擔。'},
+    '63': {'aspect': '大吉', 'brief': '大功告成，圓滿完成', 'story': '既濟，亨小，利貞。初吉終亂。此卦象徵完成與圓滿，您的努力終於開花結果。', 'fortune': '近期將迎來一個圓滿的結局，一件事情將告一段落。但記住：完成不是終點，而是新的起點...', 'fortune_hook': '🔮 想知道下一個目標該是什麼？如何保持這波好運？', 'advice': '善始善終，再創新高。一個結束是另一個開始。'},
+    '64': {'aspect': '平', 'brief': '萬事開頭，奠定基礎', 'story': '屯，元亨利貞，勿用有攸往，利建侯。此卦如同破土而出的種子，代表新的開始。', 'fortune': '近期可能開始一個新項目或進入新階段，開頭雖難，但只要根基穩固，後續就會順利...', 'fortune_hook': '🔮 想知道如何打好基礎？開頭該注意什麼？', 'advice': '穩紮穩打，奠定基礎。好的開始是成功的一半。'},
+    '65': {'aspect': '吉', 'brief': '涵養積累，厚積薄發', 'story': '井，改邑不改井。此卦如同深井，象徵內在的涵養與積累。', 'fortune': '近期適合充實自己，學習新技能或積累資源。現在的積累會成為未來的資本...', 'fortune_hook': '🔮 想知道該學習什麼？積累的資源何時能派上用場？', 'advice': '充實內在，積蓄能量。厚積才能薄發。'},
+    '66': {'aspect': '凶', 'brief': '險阻在前，謹慎應對', 'story': '坎，有孚維心亨，行有尚。此卦象徵水的險惡，提醒您前方有坎坷。', 'fortune': '近期可能遇到一些困難或阻礙，看起來有些棘手。但只要保持冷靜，一定能找到出路...', 'fortune_hook': '🔮 想知道困難具體是什麼？如何安全度過？', 'advice': '謹慎行事，保持冷靜。沒有過不去的坎。'},
+    '67': {'aspect': '凶', 'brief': '道路艱難，迂迴前進', 'story': '蹇，利西南，不利東北，利見大人，貞吉。此卦象徵行路艱難，但有方法可解。', 'fortune': '近期前進的道路不太順暢，可能需要繞路而行。直線不通，曲線也是一種智慧...', 'fortune_hook': '🔮 想知道該繞向哪個方向？誰能幫您指路？', 'advice': '靈活變通，迂迴前進。條條大路通羅馬。'},
+    '68': {'aspect': '吉', 'brief': '親善合作，貴人相助', 'story': '比，吉。原筮元永貞，無咎。此卦象徵親近與合作，您不是孤軍奮戰。', 'fortune': '近期將獲得他人的支持，可能是貴人相助或團隊合作。接受幫助不是軟弱...', 'fortune_hook': '🔮 想知道貴人是誰？該如何建立這份連結？', 'advice': '廣結善緣，接受幫助。眾人拾柴火焰高。'},
+    '71': {'aspect': '吉', 'brief': '蓄勢待發，大器晚成', 'story': '大畜，利貞，不家食吉，利涉大川。此卦象徵大的積蓄，能量正在累積。', 'fortune': '近期您的能量和資源正在持續累積，雖然還沒到爆發的時刻，但時機很快就會成熟...', 'fortune_hook': '🔮 想知道爆發點何時到來？如何最大化累積的效果？', 'advice': '繼續積蓄，等待時機。大器晚成，後來居上。'},
+    '72': {'aspect': '平', 'brief': '有捨有得，以退為進', 'story': '損，有孚，元吉，無咎可貞。此卦提醒您：有時候減少反而是增加。', 'fortune': '近期可能需要做出一些取捨，放棄某些東西來獲得更重要的。這是值得的交換...', 'fortune_hook': '🔮 想知道該放棄什麼？能換來什麼？', 'advice': '適當割捨，輕裝前行。捨得捨得，有捨才有得。'},
+    '73': {'aspect': '平', 'brief': '修飾外表，內外兼修', 'story': '賁，亨，小利有攸往。此卦象徵修飾與美化，提醒您內外要兼顧。', 'fortune': '近期注意自己的形象和表達，外在的改變可能帶來新的機會。但別忘了內在的修養...', 'fortune_hook': '🔮 想知道該如何改變形象？哪些方面需要加強？', 'advice': '內外兼修，表裡如一。外表是內心的鏡子。'},
+    '74': {'aspect': '吉', 'brief': '頤養身心，修身養性', 'story': '頤，貞吉，觀頤，自求口實。此卦關乎滋養與照顧，提醒您照顧好自己。', 'fortune': '近期適合調養身心，注意飲食和休息。身體發出的信號不要忽視...', 'fortune_hook': '🔮 想知道身體哪些方面需要注意？如何更好地調養？', 'advice': '照顧身體，滋養心靈。身體是革命的本錢。'},
+    '75': {'aspect': '平', 'brief': '撥亂反正，整頓問題', 'story': '蠱，元亨，利涉大川，先甲三日，後甲三日。此卦象徵整頓積弊，是時候處理那些遺留問題了。', 'fortune': '近期適合解決一些積壓已久的問題，拖延只會讓情況更糟。面對它，處理它...', 'fortune_hook': '🔮 想知道最該優先處理什麼？如何有效解決？', 'advice': '直面問題，徹底解決。拖延是問題的養分。'},
+    '76': {'aspect': '吉', 'brief': '虛心學習，啟蒙成長', 'story': '蒙，亨。匪我求童蒙，童蒙求我。此卦象徵學習與啟蒙，保持學習的心態。', 'fortune': '近期可能遇到學習的機會或遇見能指導您的人。保持謙虛，您會獲得重要的知識...', 'fortune_hook': '🔮 想知道該學習什麼？誰會是您的指路人？', 'advice': '保持謙遜，虛心學習。學無止境，活到老學到老。'},
+    '77': {'aspect': '平', 'brief': '止而不妄，靜待良機', 'story': '艮，艮其背，不獲其身。此卦象徵停止與等待，有時候不動是最好的行動。', 'fortune': '近期不適合大動作，維持現狀反而是最佳策略。時機未到，強行出擊會適得其反...', 'fortune_hook': '🔮 想知道該等到什麼時候？在等待期間該做什麼？', 'advice': '按兵不動，靜待時機。動不如靜，多不如少。'},
+    '78': {'aspect': '小心', 'brief': '暫時蟄伏，保存實力', 'story': '剝，不利有攸往。此卦提醒您：現在是收縮的時候，不宜擴張。', 'fortune': '近期運勢處於低谷期，要做好過冬的準備。減少不必要的消耗，保存核心實力...', 'fortune_hook': '🔮 想知道低潮期多久？該保留什麼、放棄什麼？', 'advice': '韜光養晦，保存實力。冬天之後一定是春天。'},
+    '81': {'aspect': '大吉', 'brief': '天地交泰，萬事亨通', 'story': '泰，小往大來，吉亨。此卦是最吉祥的卦象之一，天地相交，萬物通泰。', 'fortune': '近期您將迎來極為順遂的時期，各方面都會有好的發展。貴人、機遇都在向您靠近...', 'fortune_hook': '🔮 想知道好運會持續多久？如何讓它最大化？', 'advice': '把握時機，大膽行動。天時地利人和，正是此時。'},
+    '82': {'aspect': '吉', 'brief': '親臨督導，以身作則', 'story': '臨，元亨利貞，至于八月有凶。此卦象徵親自參與和督導的重要性。', 'fortune': '近期需要您親自出馬的事情會增多，您的親自參與會帶來不同的結果...', 'fortune_hook': '🔮 想知道哪些事需要親自處理？如何有效管理時間？', 'advice': '身先士卒，親力親為。榜樣的力量是無窮的。'},
+    '83': {'aspect': '小心', 'brief': '光明隱晦，蟄伏待機', 'story': '明夷，利艱貞。此卦如同日落之象，光明暫時被遮蔽，但太陽終會再升起。', 'fortune': '近期可能感覺不太順，才華得不到施展。但這是黎明前的黑暗，繼續蓄積能量...', 'fortune_hook': '🔮 想知道光明何時重現？如何在黑暗中保持希望？', 'advice': '韜光養晦，保持信心。黑夜終將過去，黎明終將來臨。'},
+    '84': {'aspect': '吉', 'brief': '否極泰來，一陽復始', 'story': '復，亨。出入無疾，朋來無咎。此卦象徵轉機與新生，最黑暗之後就是光明。', 'fortune': '近期您將走出困境，迎來轉機。之前的付出沒有白費，收穫即將來臨...', 'fortune_hook': '🔮 想知道轉機會以什麼形式出現？如何把握？', 'advice': '堅持信念，迎接曙光。冬天來了，春天還會遠嗎？'},
+    '85': {'aspect': '吉', 'brief': '穩步上升，蒸蒸日上', 'story': '升，元亨，用見大人，勿恤。此卦如同植物向上生長，象徵穩定的上升。', 'fortune': '近期您的運勢正在穩步上升，可能在職場、學業或其他方面獲得晉升...', 'fortune_hook': '🔮 想知道能升到什麼高度？需要注意什麼？', 'advice': '持續努力，穩健前進。每天進步一點點，終將到達頂峰。'},
+    '86': {'aspect': '吉', 'brief': '統御有方，眾望所歸', 'story': '師，貞丈人吉，無咎。此卦象徵領導與團隊，您可能被賦予領導的責任。', 'fortune': '近期可能需要承擔領導角色或帶領團隊。眾人期待您的指引...', 'fortune_hook': '🔮 想知道如何成為好的領導？該帶領團隊往哪走？', 'advice': '以德服人，凝聚人心。好的領導者是服務者。'},
+    '87': {'aspect': '大吉', 'brief': '謙虛為懷，福報無窮', 'story': '謙，亨，君子有終。此卦是易經中唯一六爻皆吉的卦，謙虛的力量超乎想像。', 'fortune': '近期保持謙虛的態度會帶來意想不到的好運，您的低調反而會吸引更多人的認可...', 'fortune_hook': '🔮 想知道好運會以什麼形式出現？如何保持謙虛？', 'advice': '謙受益，滿招損。越是有能力，越要懂得謙虛。'},
+    '88': {'aspect': '吉', 'brief': '厚德載物，包容萬象', 'story': '坤，元亨，利牝馬之貞。此卦如同大地，象徵包容與承載的力量。', 'fortune': '近期適合以包容的心態面對一切，接納不同的人和觀點會為您帶來意想不到的收穫...', 'fortune_hook': '🔮 想知道該包容什麼？這份包容會帶來什麼？', 'advice': '包容萬物，厚德載物。海納百川，有容乃大。'}
 }
 
 # ============================================================
@@ -2379,7 +2022,7 @@ def create_result_flex(result, remaining, is_premium=False, ai_interp=None, cate
                             "layout": "vertical",
                             "width": "50px",
                             "height": "50px",
-                            "backgroundColor": crystal['color'],
+                            "backgroundColor": crystal.get('color', '#F5F5F5'),
                             "cornerRadius": "25px",
                             "contents": []
                         },
@@ -2389,11 +2032,11 @@ def create_result_flex(result, remaining, is_premium=False, ai_interp=None, cate
                             "flex": 1,
                             "paddingStart": "15px",
                             "contents": [
-                                {"type": "text", "text": crystal['name'], "size": "md", "weight": "bold", "color": "#333333"},
-                                {"type": "text", "text": crystal['benefit'], "size": "sm", "color": "#666666", "wrap": True},
-                                {"type": "text", "text": f"📍 {crystal.get('placement', crystal.get('usage', ''))}", "size": "xs", "color": "#888888", "wrap": True, "margin": "sm"},
-                                {"type": "text", "text": f"🤚 {crystal.get('wearing', '')}", "size": "xs", "color": "#888888", "wrap": True, "margin": "sm"},
-                                {"type": "text", "text": f"💡 預算有限？{crystal.get('alternative', '')}也不錯", "size": "xs", "color": "#9370DB", "wrap": True, "margin": "sm"}
+                                {"type": "text", "text": crystal.get('name', '白水晶'), "size": "md", "weight": "bold", "color": "#333333"},
+                                {"type": "text", "text": crystal.get('benefit', '淨化能量'), "size": "sm", "color": "#666666", "wrap": True},
+                                {"type": "text", "text": f"📍 {crystal.get('placement', crystal.get('usage', '隨身攜帶'))}", "size": "xs", "color": "#888888", "wrap": True, "margin": "sm"},
+                                {"type": "text", "text": f"🤚 {crystal.get('wearing', '左手佩戴')}", "size": "xs", "color": "#888888", "wrap": True, "margin": "sm"},
+                                {"type": "text", "text": f"💡 預算有限？{crystal.get('alternative', '白水晶')}也不錯", "size": "xs", "color": "#9370DB", "wrap": True, "margin": "sm"}
                             ]
                         }
                     ]
@@ -3987,7 +3630,7 @@ def handle_message(event):
                 category = pending.get('category', 'general')
             
             # 清除 pending
-            conn = sqlite3.connect('yizhan.db')
+            conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute('DELETE FROM pending_questions WHERE user_id = ?', (user_id,))
             conn.commit()
@@ -4413,7 +4056,7 @@ def handle_postback(event):
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.2"}
+    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.2.1"}
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=True)
