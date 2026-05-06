@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-籟柏太極易占 LINE Bot v6.2.1
-功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、AI 深度解讀、水晶推薦、易經智慧、搖卦儀式（兩步驟）
+籟柏太極易占 LINE Bot v6.2.3
+功能：問事占卜、快速問題按鈕、用戶資料收集、個人化解讀、每日運勢推送、簽到系統、人工深度解讀、水晶推薦、易經智慧、搖卦儀式（兩步驟）
 
-v6.2.1 修復：
-- 補回 get_user() 函數（自動建立用戶並回傳 dict）
-- 補上 init_db() 函數（建立所有必要資料表）
-- 啟動時自動呼叫 init_db()
+v6.2.3 改動：
+- VIP 結果頁加上「📿 申請本次解讀」按鈕
+- 客人申請後自動 push 通知管理員
+- 管理員可用 LINE 指令「管理員:待解讀」查清單、「管理員:解讀:#ID」生成並直送客人
+- AI 解讀用嚴格 prompt（限制冷讀句、禁雞湯詞、要求引卦辭）
+- VIP 配額：每月 1 次免費（資料表 vip_interpretations 紀錄）
+- 新增環境變數 ADMIN_USER_ID（限制管理員指令）
+
+v6.2.2：移除 AI 即時解讀、加 VIP 今日宜忌與時辰、修正卦象偏向感情問題
+v6.2.1：補回 get_user() 與 init_db() 函數
 
 Author: SAROW / 籟柏
 License: MIT
-Version: 6.2.1
+Version: 6.2.3
 """
 
 import os
@@ -60,6 +66,7 @@ app = Flask(__name__)
 configuration = Configuration(access_token=os.environ.get('CHANNEL_ACCESS_TOKEN', ''))
 handler = WebhookHandler(os.environ.get('CHANNEL_SECRET', ''))
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+ADMIN_USER_ID = os.environ.get('ADMIN_USER_ID', '')  # v6.2.3: 管理員專屬 LINE user_id
 
 FREE_DAILY_LIMIT = 3
 
@@ -153,6 +160,22 @@ def init_db():
         user_id TEXT PRIMARY KEY,
         daily_fortune_enabled INTEGER DEFAULT 0,
         push_time TEXT DEFAULT '08:00'
+    )''')
+
+    # v6.2.3: VIP 人工解讀申請清單
+    c.execute('''CREATE TABLE IF NOT EXISTS vip_interpretations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        request_month TEXT,
+        hexagram_code TEXT,
+        hexagram_name TEXT,
+        question TEXT,
+        category TEXT,
+        status TEXT DEFAULT 'pending',
+        used_quota_type TEXT DEFAULT 'free',
+        ai_draft TEXT,
+        sent_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
 
     conn.commit()
@@ -1503,7 +1526,7 @@ HEXAGRAM_MEANINGS = {
     '12': {'aspect': '小心', 'brief': '如履薄冰，步步為營', 'story': '履虎尾，不咥人，亨。此卦提醒您正行走在微妙的處境中，看似平靜的表面下暗藏玄機。但只要謹慎行事，終能化險為夷。', 'fortune': '近期可能面臨一個需要抉擇的情況，表面上的好選擇未必是正確答案。有人在暗中觀察您的反應...', 'fortune_hook': '🔮 想知道該如何識破迷局？哪個選擇才是正確的？', 'advice': '謹言慎行，三思後行。遇事多觀察，少表態。'},
     '13': {'aspect': '吉', 'brief': '志同道合，眾志成城', 'story': '同人于野，亨。此卦象徵人際關係的和諧與合作的力量。您身邊正聚集著與您理念相近的人，這是難得的機緣。', 'fortune': '近期將遇到一位與您「頻率相同」的人，可能在意想不到的場合。這段關係將為您帶來重要的轉變...', 'fortune_hook': '🔮 想知道這個人會在哪裡出現？如何識別他/她？', 'advice': '廣結善緣，真誠待人。合作比單打獨鬥更有力量。'},
     '14': {'aspect': '吉', 'brief': '天道無妄，誠者自通', 'story': '無妄，元亨利貞。此卦告訴您：保持真誠，不妄作為，天道自然會眷顧。近期發生的事情都有其深意，順其自然反而是最好的策略。', 'fortune': '一件看似「意外」的事情正在醞釀，但這其實是宇宙的安排。表面的阻礙實際上是在保護您...', 'fortune_hook': '🔮 想知道這個「意外」是什麼？如何將它轉化為機遇？', 'advice': '保持真誠，順應天時。不強求，不妄動。'},
-    '15': {'aspect': '平', 'brief': '邂逅姻緣，隨緣應變', 'story': '姤，女壯，勿用取女。此卦暗示意外的相遇，可能帶來新的機會或關係。但需要慧眼識人，不被表象迷惑。', 'fortune': '近期會有一個「突然出現」的人或機會，看起來很誘人。但第一印象可能有所偏差...', 'fortune_hook': '🔮 想知道如何辨別真偽？這個機會該不該把握？', 'advice': '保持警覺，觀察為主。不要被一時的熱情沖昏頭。'},
+    '15': {'aspect': '平', 'brief': '不期而遇，慧眼識人', 'story': '姤，女壯，勿用取女。此卦象徵突如其來的相遇或機緣。看似誘人的人事物背後，可能藏著您沒看清的盤算。識人辨事，是此刻最重要的功課。', 'fortune': '近期會有一個「突然出現」的人、機會或選項，乍看之下吸引人。但第一印象往往有偏差，深入了解後可能發現另一面...', 'fortune_hook': '🔮 想知道如何辨別真偽？這個機會該不該把握？', 'advice': '保持警覺，多方查證。不要被一時的熱情或承諾沖昏頭。'},
     '16': {'aspect': '凶', 'brief': '爭訟之象，退一步海闊天空', 'story': '訟，有孚窒惕，中吉，終凶。此卦警示您正處於或即將進入一個爭端的處境。贏了道理，可能輸了更多。', 'fortune': '近期要特別注意人際關係中的暗流。有人可能對您心存不滿，或者一場誤會正在發酵...', 'fortune_hook': '🔮 想知道是誰在背後？如何化解這場危機？', 'advice': '忍讓為上，和解為貴。爭一時不如謀長遠。'},
     '17': {'aspect': '平', 'brief': '韜光養晦，以退為進', 'story': '遯，亨，小利貞。此卦如同智者的戰略性撤退，暫時的隱忍是為了更好的出擊。現在不是正面對抗的時機。', 'fortune': '近期您可能感到某些事情「不對勁」，這種直覺是對的。暫時的退讓會為您保存實力...', 'fortune_hook': '🔮 想知道該退到什麼程度？何時才是反攻的時機？', 'advice': '避其鋒芒，保存實力。蟄伏是為了更好的騰飛。'},
     '18': {'aspect': '凶', 'brief': '天地閉塞，靜待春來', 'story': '否之匪人，不利君子貞。此卦象徵暫時的阻滯，上下不通、內外不和。但請記住：否極泰來，黑暗之後必是黎明。', 'fortune': '近期可能感到事事不順，溝通不暢。但這是黎明前的黑暗，一個重要的轉折點即將來臨...', 'fortune_hook': '🔮 想知道轉機何時出現？如何度過這段低潮期？', 'advice': '靜待時機，不宜強求。養精蓄銳，準備迎接轉機。'},
@@ -1513,7 +1536,7 @@ HEXAGRAM_MEANINGS = {
     '24': {'aspect': '吉', 'brief': '隨機應變，順勢而為', 'story': '隨，元亨利貞，無咎。此卦告訴您：識時務者為俊傑。能夠靈活應變的人，才能在變化中找到機會。', 'fortune': '近期環境可能有所變化，但這恰恰是您展現應變能力的機會。有人正在觀察您如何處理變局...', 'fortune_hook': '🔮 想知道應該跟隨什麼趨勢？如何在變化中勝出？', 'advice': '靈活變通，順勢而為。僵化固執只會被淘汰。'},
     '25': {'aspect': '小心', 'brief': '過猶不及，適可而止', 'story': '大過，棟撓，利有攸往，亨。此卦警示您：再好的事情，過度了也會變成負擔。知道何時停下來，是一種智慧。', 'fortune': '近期您可能在某件事上投入過多，無論是精力、金錢還是感情。過度的付出可能帶來反效果...', 'fortune_hook': '🔮 想知道具體是哪方面過度了？如何找回平衡？', 'advice': '量力而行，適可而止。過度的熱情可能燒傷自己。'},
     '26': {'aspect': '凶', 'brief': '身陷困境，守正待援', 'story': '困，亨，貞大人吉。此卦如同困獸之鬥，但請記住：真正的勇者，是在困境中依然保持希望的人。', 'fortune': '近期可能遇到一些阻礙，感覺四處碰壁。但這個困境中藏著一個轉機，只有冷靜下來才能發現...', 'fortune_hook': '🔮 想知道突破口在哪裡？誰能幫您走出困境？', 'advice': '堅守正道，保持信心。困境是暫時的，成長是永恆的。'},
-    '27': {'aspect': '吉', 'brief': '心有靈犀，感應相通', 'story': '咸，亨利貞，取女吉。此卦是感應之卦，象徵心靈的相通與情感的連結。您與某人或某事之間存在著微妙的緣分。', 'fortune': '近期您會感受到一種「說不清的連結」，可能是對某人、某地或某個想法。這種直覺是真實的...', 'fortune_hook': '🔮 想知道這個連結指向什麼？如何加深這份感應？', 'advice': '敞開心扉，感受連結。真誠的能量會吸引相同的頻率。'},
+    '27': {'aspect': '吉', 'brief': '心有靈犀，感應相通', 'story': '咸，亨利貞，取女吉。咸者感也，象徵心意相通、彼此感應。在人事物之間，您與某個對象之間存在著難以言喻的契合。', 'fortune': '近期您會感受到一種「說不清的連結」——可能是對某人、某個機會、某個地方或某個想法。這種直覺通常是準的...', 'fortune_hook': '🔮 想知道這個連結指向什麼？如何加深這份感應？', 'advice': '相信直覺，敞開心扉。真誠的能量會吸引相同頻率的對應。'},
     '28': {'aspect': '吉', 'brief': '眾緣和合，聚沙成塔', 'story': '萃，亨。王假有廟。此卦象徵聚集與凝聚，眾人的力量匯聚在一起，可以成就大事。', 'fortune': '近期是拓展人脈、建立團隊的好時機。一群人正在向您靠近，或者您正被邀請加入某個圈子...', 'fortune_hook': '🔮 想知道該加入哪個圈子？如何識別真正的夥伴？', 'advice': '團結合作，凝聚力量。一個人走得快，一群人走得遠。'},
     '31': {'aspect': '大吉', 'brief': '大有斬獲，前程似錦', 'story': '大有，元亨。此卦是豐收之象，您之前的付出將得到豐厚的回報。這是值得慶祝的時刻。', 'fortune': '近期將有意想不到的收穫，可能是物質上的，也可能是精神上的。一個機會正在向您敞開大門...', 'fortune_hook': '🔮 想知道這個機會在哪個領域？如何最大化這波收穫？', 'advice': '把握機遇，大展宏圖。好運來臨時，要有準備接住它的能力。'},
     '32': {'aspect': '平', 'brief': '觀點分歧，各執己見', 'story': '睽，小事吉。此卦象徵差異與分離，但差異不一定是壞事。有時候，不同的視角能帶來新的發現。', 'fortune': '近期可能與某人產生意見分歧，表面上看是衝突，實際上可能是一個重新認識彼此的機會...', 'fortune_hook': '🔮 想知道如何化解分歧？這段關係還有轉圜的餘地嗎？', 'advice': '求同存異，理解差異。每個人都有自己的視角。'},
@@ -1524,7 +1547,7 @@ HEXAGRAM_MEANINGS = {
     '37': {'aspect': '平', 'brief': '旅途在外，隨遇而安', 'story': '旅，小亨，旅貞吉。此卦象徵旅行與漂泊，在不熟悉的環境中尋找方向。', 'fortune': '近期可能有出行的機會，或者在某個「陌生領域」探索。這段旅程會帶給您意想不到的收穫...', 'fortune_hook': '🔮 想知道該往哪個方向去？旅途中會遇到什麼人？', 'advice': '入境隨俗，保持彈性。旅行是最好的學習。'},
     '38': {'aspect': '吉', 'brief': '步步高升，前程似錦', 'story': '晉，康侯用錫馬蕃庶，晝日三接。此卦如同旭日東升，步步向上。您的努力即將得到認可。', 'fortune': '近期將有晉升或進步的機會，無論是職位、能力還是聲望。有人正在關注您的表現...', 'fortune_hook': '🔮 想知道機會何時降臨？該如何表現才能脫穎而出？', 'advice': '穩健前進，展現實力。機會是給準備好的人。'},
     '41': {'aspect': '大吉', 'brief': '氣勢如虹，大有可為', 'story': '大壯，利貞。此卦如同春雷震天，氣勢正盛。這是您最有力量的時刻。', 'fortune': '近期您的能量將達到高峰，無論做什麼都會事半功倍。一個大展身手的舞台正在等著您...', 'fortune_hook': '🔮 想知道該如何運用這股力量？在哪個領域突破？', 'advice': '乘勝追擊，大膽行動。力量巔峰時，就是出擊時。'},
-    '42': {'aspect': '吉', 'brief': '姻緣和合，情感順遂', 'story': '歸妹，征凶，無攸利。此卦與情感關係密切，象徵著緣分的牽引與歸屬。', 'fortune': '近期感情方面可能有新的發展，單身者有望遇到有緣人，有伴侶者關係可能更進一步...', 'fortune_hook': '🔮 想知道緣分何時到來？對方是什麼樣的人？', 'advice': '珍惜緣分，真誠相待。緣分天注定，但幸福靠經營。'},
+    '42': {'aspect': '平', 'brief': '位階不對等，審慎評估', 'story': '歸妹，征凶，無攸利。此卦象徵地位不對等的結合或勉強配合的局面——您可能是配合的一方，名分不正、條件不對等。需要先看清自己是否甘願。', 'fortune': '近期可能面臨一個「不對等」的處境：對方主導、您配合；或是名不正言不順的狀況。短期看似有得，長期可能留下遺憾...', 'fortune_hook': '🔮 想知道這個處境該不該接？如何爭取對等地位？', 'advice': '審慎評估自己的位置，名正言順再行動。勉強配合容易留下後患。'},
     '43': {'aspect': '大吉', 'brief': '豐盛圓滿，鼎盛時期', 'story': '豐，亨，王假之，勿憂，宜日中。此卦是極致的豐盛之象，如同正午的太陽最為燦爛。', 'fortune': '近期是您的高光時刻，各方面都將達到頂峰。但請記住：盛極必衰，要懂得在高處為低潮做準備...', 'fortune_hook': '🔮 想知道如何延長這波好運？該提前做哪些準備？', 'advice': '居安思危，未雨綢繆。最好的時候，要想到最壞的可能。'},
     '44': {'aspect': '平', 'brief': '警醒振作，蓄勢待發', 'story': '震，亨。震來虩虩，笑言啞啞。此卦如同雷聲隆隆，既是警示也是喚醒。', 'fortune': '近期可能遇到一些「震動」，這些震動是在提醒您某些被忽略的事情。驚醒之後，就是行動...', 'fortune_hook': '🔮 想知道這個警示是關於什麼？該如何應對？', 'advice': '提高警覺，保持清醒。震動是宇宙的提醒。'},
     '45': {'aspect': '吉', 'brief': '持之以恆，終有所成', 'story': '恆，亨，無咎，利貞。此卦強調恆久之道，堅持的力量超乎想像。', 'fortune': '您正在做的某件事，需要再堅持一段時間。勝利已經在望，放棄是最大的遺憾...', 'fortune_hook': '🔮 想知道還需要堅持多久？如何保持動力？', 'advice': '堅持不懈，持之以恆。成功屬於能堅持到最後的人。'},
@@ -1533,7 +1556,7 @@ HEXAGRAM_MEANINGS = {
     '48': {'aspect': '吉', 'brief': '安樂順遂，享受當下', 'story': '豫，利建侯行師。此卦是愉悅之象，象徵順遂與享受。這是一段可以稍微放鬆的時光。', 'fortune': '近期適合享受生活，參與一些娛樂活動。一個讓您開心的事情即將發生...', 'fortune_hook': '🔮 想知道這個開心的事是什麼？如何讓愉悅持續更久？', 'advice': '享受當下，適度娛樂。人生需要張弛有度。'},
     '51': {'aspect': '吉', 'brief': '積少成多，穩健前行', 'story': '小畜，亨。密雲不雨，自我西郊。此卦如同細雨潤物，小的積累終將帶來大的成果。', 'fortune': '近期可能感覺進展緩慢，但不要急躁。每一個小進步都在為大突破做準備...', 'fortune_hook': '🔮 想知道突破何時到來？該如何加速積累？', 'advice': '腳踏實地，積少成多。不積跬步，無以至千里。'},
     '52': {'aspect': '吉', 'brief': '誠信為本，心靈相通', 'story': '中孚，豚魚吉，利涉大川。此卦強調誠信的力量，真誠的心可以感動一切。', 'fortune': '近期您的真誠將得到回報，有人會因為您的誠信而給予信任或機會...', 'fortune_hook': '🔮 想知道誰會信任您？這份信任會帶來什麼？', 'advice': '以誠待人，言行一致。誠信是最好的名片。'},
-    '53': {'aspect': '吉', 'brief': '家庭和睦，親情融洽', 'story': '家人，利女貞。此卦關乎家庭與親密關係，強調內部和諧的重要性。', 'fortune': '近期家庭運勢良好，適合處理家務事或加強與家人的連結。一個家庭相關的好消息可能傳來...', 'fortune_hook': '🔮 想知道這個好消息是什麼？如何讓家庭更和諧？', 'advice': '珍惜家人，維護和諧。家和萬事興。'},
+    '53': {'aspect': '吉', 'brief': '內部和諧，根基穩固', 'story': '家人，利女貞。此卦關乎核心圈子的和睦——可以是家庭，也可以是團隊、合夥關係。內部穩了，才有對外發展的本錢。', 'fortune': '近期適合處理內部事務、加強核心圈的連結。一個來自內部的好消息或支持可能即將到來...', 'fortune_hook': '🔮 想知道內部該如何整頓？哪個關鍵人值得加深關係？', 'advice': '穩固內部，再談外擴。家和、團和、夥伴和，萬事興。'},
     '54': {'aspect': '吉', 'brief': '利人利己，互惠共贏', 'story': '益，利有攸往，利涉大川。此卦象徵增益與助人，您給出去的，會以另一種形式回來。', 'fortune': '近期是助人的好時機，您的善意將帶來意想不到的回報。一個需要您幫助的人可能出現...', 'fortune_hook': '🔮 想知道該幫助誰？回報會以什麼形式出現？', 'advice': '樂於助人，廣結善緣。施比受更有福。'},
     '55': {'aspect': '平', 'brief': '柔順處世，以柔克剛', 'story': '巽，小亨，利有攸往，利見大人。此卦象徵風的特性：柔順但無處不入。', 'fortune': '近期適合採取柔性策略，硬碰硬可能適得其反。有時候退讓反而能達成目標...', 'fortune_hook': '🔮 想知道該如何「以柔克剛」？在哪裡該退讓？', 'advice': '謙遜低調，柔能克剛。水善利萬物而不爭。'},
     '56': {'aspect': '小心', 'brief': '渙散之象，收心聚力', 'story': '渙，亨。王假有廟。此卦提醒您注意分散的風險，無論是注意力、資源還是關係。', 'fortune': '近期可能感到有些散亂，精力被分散在太多事情上。需要重新聚焦，找回核心...', 'fortune_hook': '🔮 想知道該聚焦在什麼上？如何重整旗鼓？', 'advice': '收心聚力，專注核心。分散是效率的敵人。'},
@@ -1688,7 +1711,237 @@ def get_ai_interpretation(hexagram_name, hexagram_code, question, upper, lower, 
         return None
 
 # ============================================================
-# 占卜核心：太極陰陽魚
+# VIP 專屬：今日宜忌 + 最佳行動時辰（不需 API，根據卦象+時辰計算）
+# ============================================================
+
+# 卦運對應的「宜」「忌」清單
+ASPECT_DOS_DONTS = {
+    '大吉': {
+        'dos': ['主動出擊', '推進大計畫', '結交新貴人', '簽約合作'],
+        'donts': ['驕傲自滿', '看輕對手', '揮霍好運']
+    },
+    '吉': {
+        'dos': ['穩步前進', '深化既有關係', '把握機會', '多溝通'],
+        'donts': ['冒進躁進', '過度承諾', '忽略細節']
+    },
+    '平': {
+        'dos': ['沉澱反思', '充實自己', '蓄積實力', '檢視方向'],
+        'donts': ['做重大決定', '冒險投資', '強求結果']
+    },
+    '小心': {
+        'dos': ['謹言慎行', '低調行事', '多方查證', '備案準備'],
+        'donts': ['輕信他人', '簽重要文件', '正面衝突', '張揚高調']
+    },
+    '凶': {
+        'dos': ['沉潛蓄力', '處理舊問題', '修復關係', '尋求協助'],
+        'donts': ['擴張動作', '硬碰硬', '借貸投資', '重大改變']
+    }
+}
+
+# 上卦五行 → 對應旺時辰（傳統地支時辰）
+ELEMENT_TO_HOURS = {
+    '金': [('申時', '15:00-17:00', '金氣旺'), ('酉時', '17:00-19:00', '金氣最旺')],
+    '木': [('寅時', '03:00-05:00', '木氣初生'), ('卯時', '05:00-07:00', '木氣最旺')],
+    '水': [('亥時', '21:00-23:00', '水氣旺'), ('子時', '23:00-01:00', '水氣最旺')],
+    '火': [('巳時', '09:00-11:00', '火氣旺'), ('午時', '11:00-13:00', '火氣最旺')],
+    '土': [('辰時', '07:00-09:00', '土氣旺'), ('未時', '13:00-15:00', '土氣穩')]
+}
+
+def get_vip_dos_donts(aspect):
+    """根據卦運生成今日宜忌"""
+    data = ASPECT_DOS_DONTS.get(aspect, ASPECT_DOS_DONTS['平'])
+    return {
+        'dos': '、'.join(data['dos']),
+        'donts': '、'.join(data['donts'])
+    }
+
+def get_vip_best_hours(upper_element, lower_element):
+    """根據上下卦五行推算最佳行動時辰"""
+    # 上卦主導，列出 1 個最佳時辰
+    upper_hours = ELEMENT_TO_HOURS.get(upper_element, ELEMENT_TO_HOURS['土'])
+    primary = upper_hours[1] if len(upper_hours) > 1 else upper_hours[0]
+    # 下卦輔助時辰
+    lower_hours = ELEMENT_TO_HOURS.get(lower_element, ELEMENT_TO_HOURS['土'])
+    secondary = lower_hours[0]
+    return {
+        'primary': primary,    # (時辰名, 時間, 說明)
+        'secondary': secondary
+    }
+
+# ============================================================
+# v6.2.3: VIP 人工解讀系統
+# ============================================================
+
+def get_current_month_str():
+    """取得當月字串 (YYYY-MM 格式)"""
+    return get_tw_now().strftime('%Y-%m')
+
+def get_vip_quota_used(user_id):
+    """取得 VIP 用戶本月已使用的免費解讀次數"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''SELECT COUNT(*) FROM vip_interpretations
+                 WHERE user_id = ? AND request_month = ?
+                 AND used_quota_type = 'free' ''',
+              (user_id, get_current_month_str()))
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+def can_request_vip_interpretation(user_id):
+    """檢查 VIP 用戶能否申請人工解讀
+    回傳: (能否申請, 剩餘配額, 訊息)
+    """
+    used = get_vip_quota_used(user_id)
+    free_quota = 1  # 每月免費 1 次
+    if used < free_quota:
+        return True, free_quota - used, '本月剩餘 1 次免費解讀'
+    return False, 0, '本月免費額度已用完'
+
+def create_vip_interpretation_request(user_id, hexagram_code, hexagram_name,
+                                       question, category, quota_type='free'):
+    """建立 VIP 人工解讀申請"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''INSERT INTO vip_interpretations
+                 (user_id, request_month, hexagram_code, hexagram_name,
+                  question, category, status, used_quota_type)
+                 VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)''',
+              (user_id, get_current_month_str(), hexagram_code, hexagram_name,
+               question, category, quota_type))
+    request_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return request_id
+
+def get_pending_vip_interpretations(limit=20):
+    """取得待解讀清單(管理員用)"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''SELECT id, user_id, hexagram_code, hexagram_name,
+                        question, category, used_quota_type, created_at
+                 FROM vip_interpretations
+                 WHERE status = 'pending'
+                 ORDER BY created_at ASC
+                 LIMIT ?''', (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def get_vip_interpretation_by_id(request_id):
+    """取得單筆解讀申請"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''SELECT id, user_id, hexagram_code, hexagram_name,
+                        question, category, status, used_quota_type
+                 FROM vip_interpretations WHERE id = ?''', (request_id,))
+    row = c.fetchone()
+    conn.close()
+    return row
+
+def mark_vip_interpretation_sent(request_id, ai_draft):
+    """標記解讀已送出"""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''UPDATE vip_interpretations
+                 SET status = 'sent', ai_draft = ?, sent_at = ?
+                 WHERE id = ?''',
+              (ai_draft, get_tw_now().isoformat(), request_id))
+    conn.commit()
+    conn.close()
+
+def generate_master_interpretation(hexagram_name, hexagram_code, question, category, upper, lower):
+    """
+    生成籟柏老師風格的解讀(包裝 AI,但 prompt 嚴格控制)
+    回傳: 解讀文字 or None(失敗)
+    """
+    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
+        return None
+
+    classic = HEXAGRAM_CLASSIC.get(hexagram_name, {})
+    classic_meaning = classic.get('meaning', '')
+    classic_desc = classic.get('description', '')
+    meaning = HEXAGRAM_MEANINGS.get(hexagram_code, {})
+    aspect = meaning.get('aspect', '平')
+
+    cat_info = QUESTION_CATEGORIES.get(category, {})
+    cat_name = cat_info.get('name', '綜合運勢')
+
+    # 嚴格的 prompt — 限制 AI 不可氾濫使用「您可能...」這類冷讀句
+    prompt = f"""你是傳統易經命理師「籟柏老師」,為客人寫一段卦象批註。
+
+【客人問事】類別:{cat_name}
+問題:「{question}」
+
+【卦象】
+卦名:{hexagram_name}(第 {hexagram_code} 卦)
+卦運:{aspect}
+卦辭本義:{classic_meaning}
+經典釋義:{classic_desc}
+
+【寫作要求 — 必須嚴格遵守】
+
+1. **稱呼**:用「您」,自稱「老師」或「我」。不要用「親愛的」「朋友」。
+
+2. **語氣**:沉穩、像長輩,不熱情、不雞湯。
+   ❌ 禁用:「親愛的」「加油」「希望您」「相信自己」「正能量」「能量場」「宇宙」「散發光芒」「綻放」「綻放光芒」「祝福」「磁場」
+   ✅ 用詞:「我看到的是」「卦象顯示」「值得思考的是」「我的建議」
+
+3. **長度**:250-350 字。太短像敷衍,太長像 AI 灌水。
+
+4. **結構**:不分段標題、不用 emoji、像書信一段段寫下來。3-4 段。
+
+5. **必含元素**:
+   - 第一段引用卦辭原文 1 句(例如「卦辭講『征凶,無攸利』」)
+   - 解釋此卦本義並連結到客人的問題類別
+   - 給明確的方向(該做/不該做、該等/該動),不打太極
+   - 結尾一句箴言式的話,不用「祝福」「加油」
+
+6. **冷讀限制 — 極重要**:
+   整篇解讀**最多只能用一次**「您現在是不是已經...」「您心裡其實...」這種反問或推測句。
+   而且這句話必須**綁定卦象本義**,不能是空泛的「您可能有困擾」。
+   例如:歸妹卦講位階不對等,可以反問「您現在的處境,是不是已經有這個問題?」
+   ❌ 禁止氾濫使用「您可能...」「也許您...」「或許您...」這類話。
+
+7. **不要分段標題,不要 markdown 格式**,直接寫散文。
+
+8. **不要在開頭問候,不要在結尾說「希望這些建議對您有幫助」**。直接從卦象切入,從箴言收尾。
+
+現在請寫這段解讀。"""
+
+    try:
+        client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=800,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return msg.content[0].text.strip()
+    except Exception as e:
+        print(f"[generate_master_interpretation] error: {e}")
+        return None
+
+def push_message_to_user(user_id, text):
+    """主動推送訊息給用戶(用 LINE Push API)"""
+    try:
+        with ApiClient(configuration) as api_client:
+            api = MessagingApi(api_client)
+            from linebot.v3.messaging import PushMessageRequest
+            api.push_message(PushMessageRequest(
+                to=user_id,
+                messages=[TextMessage(text=text)]
+            ))
+        return True
+    except Exception as e:
+        print(f"[push_message_to_user] error: {e}")
+        return False
+
+def is_admin(user_id):
+    """檢查是否為管理員"""
+    return ADMIN_USER_ID and user_id == ADMIN_USER_ID
+
+# ============================================================
+# 占卜核心:太極陰陽魚
 # ============================================================
 def generate_trigram_from_fish(is_yang, seed_value):
     """根據陰陽魚生成卦數"""
@@ -1984,23 +2237,79 @@ def create_result_flex(result, remaining, is_premium=False, ai_interp=None, cate
     
     # VIP 專屬內容
     if is_premium:
-        # AI 深度解讀
-        if ai_interp:
-            body_contents.append({"type": "separator", "margin": "xl"})
-            body_contents.append({
-                "type": "box",
-                "layout": "vertical",
-                "margin": "xl",
-                "paddingAll": "15px",
-                "backgroundColor": "#F5F0FF",
-                "cornerRadius": "12px",
-                "contents": [
-                    {"type": "text", "text": "🤖 籟柏老師 AI 深度解讀", "size": "md", "weight": "bold", "color": "#6B21A8"},
-                    {"type": "text", "text": ai_interp, "size": "sm", "wrap": True, "margin": "md", "color": "#333333", "lineSpacing": "5px"}
-                ]
-            })
-        
-        # 水晶推薦
+        # 1. 籟柏老師人工解讀（含申請按鈕）
+        hex_code = result['hexagram']['code']
+        body_contents.append({"type": "separator", "margin": "xl"})
+        body_contents.append({
+            "type": "box",
+            "layout": "vertical",
+            "margin": "xl",
+            "paddingAll": "15px",
+            "backgroundColor": "#F5F0FF",
+            "cornerRadius": "12px",
+            "contents": [
+                {"type": "text", "text": "🧙 籟柏老師人工解讀", "size": "md", "weight": "bold", "color": "#6B21A8"},
+                {"type": "text", "text": "由籟柏老師親自為您解卦，2-5 個工作天內透過 LINE 私訊回覆完整批註。", "size": "sm", "wrap": True, "margin": "md", "color": "#333333", "lineSpacing": "5px"},
+                {"type": "text", "text": "💎 VIP 會員每月 1 次免費名額", "size": "xs", "color": "#9333EA", "margin": "md"},
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "postback",
+                        "label": "📿 申請本次解讀",
+                        "data": f"申請解讀:{hex_code}",
+                        "displayText": "📿 申請籟柏老師解讀本次卦象"
+                    },
+                    "style": "primary",
+                    "color": "#6B21A8",
+                    "height": "sm",
+                    "margin": "md"
+                }
+            ]
+        })
+
+        # 2. 今日宜忌（根據卦運生成）
+        dos_donts = get_vip_dos_donts(aspect)
+        body_contents.append({"type": "separator", "margin": "xl"})
+        body_contents.append({
+            "type": "box",
+            "layout": "vertical",
+            "margin": "xl",
+            "paddingAll": "15px",
+            "backgroundColor": "#FFFAF0",
+            "cornerRadius": "12px",
+            "contents": [
+                {"type": "text", "text": "📋 今日宜忌", "size": "md", "weight": "bold", "color": "#B8860B"},
+                {"type": "box", "layout": "vertical", "margin": "md", "contents": [
+                    {"type": "text", "text": f"✅ 宜：{dos_donts['dos']}", "size": "sm", "wrap": True, "color": "#228B22", "lineSpacing": "5px"},
+                    {"type": "text", "text": f"⚠️ 忌：{dos_donts['donts']}", "size": "sm", "wrap": True, "color": "#DC143C", "lineSpacing": "5px", "margin": "sm"}
+                ]}
+            ]
+        })
+
+        # 3. 最佳行動時辰（根據上下卦五行）
+        best_hours = get_vip_best_hours(
+            result['upper_trigram']['element'],
+            result['lower_trigram']['element']
+        )
+        primary_h = best_hours['primary']
+        secondary_h = best_hours['secondary']
+        body_contents.append({"type": "separator", "margin": "xl"})
+        body_contents.append({
+            "type": "box",
+            "layout": "vertical",
+            "margin": "xl",
+            "paddingAll": "15px",
+            "backgroundColor": "#F0F8FF",
+            "cornerRadius": "12px",
+            "contents": [
+                {"type": "text", "text": "⏰ 最佳行動時辰", "size": "md", "weight": "bold", "color": "#4169E1"},
+                {"type": "text", "text": f"🌟 {primary_h[0]}（{primary_h[1]}）— {primary_h[2]}", "size": "sm", "wrap": True, "margin": "md", "color": "#333333"},
+                {"type": "text", "text": f"☯ {secondary_h[0]}（{secondary_h[1]}）— {secondary_h[2]}", "size": "sm", "wrap": True, "margin": "sm", "color": "#666666"},
+                {"type": "text", "text": "💡 重要決定、簽約、談判，建議在主時辰進行", "size": "xs", "color": "#888888", "margin": "md"}
+            ]
+        })
+
+        # 4. 開運水晶推薦
         crystal = result['crystal']['primary']
         body_contents.append({"type": "separator", "margin": "xl"})
         body_contents.append({
@@ -3651,16 +3960,9 @@ def handle_message(event):
             result = cast_yinyang_fish(user_id, question)
             increment_daily_usage(user_id)
             
+            # v6.2.2: AI 即時解讀已改為人工解讀模式（VIP 顯示「籟柏老師 2-5 工作天回覆」占位符）
+            # 不再自動呼叫 Anthropic API，避免額度成本
             ai_interp = None
-            if is_premium:
-                ai_interp = get_ai_interpretation(
-                    result['hexagram']['name'],
-                    HEXAGRAM_ORDER.get(result['hexagram']['code'], result['hexagram']['code']),
-                    question,
-                    result['upper_trigram'],
-                    result['lower_trigram'],
-                    result['hexagram']
-                )
             
             save_divination_record(
                 user_id,
@@ -3749,7 +4051,124 @@ def handle_message(event):
                         messages=[TextMessage(text="❌ 格式錯誤，請使用：管理員:VIP:天數\n例如：管理員:VIP:365")]
                     ))
             return 'OK'
-        
+
+        # v6.2.3: 管理員 — 查詢待解讀清單
+        elif msg in ['管理員:待解讀', 'admin:pending', '管理員：待解讀']:
+            if not is_admin(user_id):
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="此指令僅限管理員使用。")]
+                ))
+                return 'OK'
+
+            pending = get_pending_vip_interpretations(limit=20)
+            if not pending:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="📋 目前沒有待解讀申請。")]
+                ))
+                return 'OK'
+
+            lines = [f"📋 待解讀清單(共 {len(pending)} 筆):\n"]
+            for r in pending:
+                rid, uid, hcode, hname, q, cat, qtype, created = r
+                date_str = created[:10] if created else ''
+                lines.append(f"#{rid} [{date_str}] {hname}")
+                lines.append(f"  Q: {q[:30]}{'...' if q and len(q) > 30 else ''}")
+                lines.append(f"  指令: 管理員:解讀:{rid}")
+                lines.append("")
+            api.reply_message(ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text="\n".join(lines))]
+            ))
+            return 'OK'
+
+        # v6.2.3: 管理員 — 生成並送出解讀(格式: 管理員:解讀:申請ID)
+        elif msg.startswith('管理員:解讀:') or msg.startswith('管理員：解讀：') or msg.startswith('管理員:解讀：') or msg.startswith('管理員：解讀:'):
+            if not is_admin(user_id):
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="此指令僅限管理員使用。")]
+                ))
+                return 'OK'
+
+            normalized = msg.replace('：', ':')
+            parts = normalized.split(':')
+            if len(parts) < 3:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="❌ 格式錯誤,請用:管理員:解讀:申請ID\n例如:管理員:解讀:5")]
+                ))
+                return 'OK'
+
+            try:
+                request_id = int(parts[2])
+            except:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="❌ 申請 ID 必須是數字")]
+                ))
+                return 'OK'
+
+            req = get_vip_interpretation_by_id(request_id)
+            if not req:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=f"❌ 找不到申請 #{request_id}")]
+                ))
+                return 'OK'
+
+            rid, target_user_id, hex_code, hex_name, question, category, status, qtype = req
+            if status != 'pending':
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=f"⚠️ 申請 #{request_id} 狀態為 {status},不能重複處理")]
+                ))
+                return 'OK'
+
+            # 取得卦象上下卦資訊
+            upper_num = int(hex_code[0])
+            lower_num = int(hex_code[1])
+            upper = TRIGRAMS.get(upper_num, {})
+            lower = TRIGRAMS.get(lower_num, {})
+
+            # 通知管理員 — 開始生成
+            api.reply_message(ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=f"⏳ 正在生成 #{request_id} 解讀,請稍候約 10 秒...")]
+            ))
+
+            # 生成解讀
+            interpretation = generate_master_interpretation(
+                hex_name, hex_code, question, category, upper, lower
+            )
+
+            if not interpretation:
+                push_message_to_user(user_id, f"❌ #{request_id} 生成失敗(API 錯誤),請稍後重試或檢查 ANTHROPIC_API_KEY 設定。")
+                return 'OK'
+
+            # 送給客人
+            client_text = (
+                f"🧙 籟柏老師為您解卦\n"
+                f"━━━━━━━━━━━━\n"
+                f"您的問事:{question}\n"
+                f"卦象:{hex_name}\n"
+                f"━━━━━━━━━━━━\n\n"
+                f"{interpretation}\n\n"
+                f"━━━━━━━━━━━━\n"
+                f"籟柏 敬上"
+            )
+            success = push_message_to_user(target_user_id, client_text)
+
+            if success:
+                mark_vip_interpretation_sent(request_id, interpretation)
+                push_message_to_user(user_id, f"✅ #{request_id} 已送出給客人\n\n副本內容:\n\n{client_text}")
+            else:
+                push_message_to_user(user_id, f"❌ #{request_id} 推送失敗,客人可能已封鎖 Bot。\n\n生成的內容:\n{interpretation}")
+
+            return 'OK'
+
+
         # 次數查詢
         elif msg in ['次數', '剩餘', '額度']:
             _, remaining = can_divine(user_id)
@@ -3984,16 +4403,9 @@ def handle_postback(event):
                 result = cast_yinyang_fish(user_id, question)
                 increment_daily_usage(user_id)
                 
+                # v6.2.2: AI 即時解讀已改為人工解讀模式（VIP 顯示「籟柏老師 2-5 工作天回覆」占位符）
+                # 不再自動呼叫 Anthropic API，避免額度成本
                 ai_interp = None
-                if is_premium:
-                    ai_interp = get_ai_interpretation(
-                        result['hexagram']['name'],
-                        HEXAGRAM_ORDER.get(result['hexagram']['code'], result['hexagram']['code']),
-                        question,
-                        result['upper_trigram'],
-                        result['lower_trigram'],
-                        result['hexagram']
-                    )
                 
                 save_divination_record(
                     user_id,
@@ -4018,8 +4430,68 @@ def handle_postback(event):
                 ))
             return
         
-        # 用戶資料收集（格式：資料:欄位:值）
-        if data.startswith('資料:'):
+        # v6.2.3: VIP 申請人工解讀(格式: 申請解讀:卦象代碼)
+        if data.startswith('申請解讀:'):
+            if not is_premium:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="🧙 人工解讀為 VIP 會員專屬功能\n\n輸入「VIP」了解詳情")]
+                ))
+                return
+
+            # 取得最近一次占卜紀錄(這次的)
+            records = get_user_history(user_id, limit=1)
+            if not records:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="找不到您最近的占卜紀錄,請先完成一次問事占卜後再申請。")]
+                ))
+                return
+
+            hex_code, hex_name, q_text, _ = records[0]
+
+            # 檢查配額
+            can_apply, remaining, _ = can_request_vip_interpretation(user_id)
+            if not can_apply:
+                api.reply_message(ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text="您本月的免費解讀名額已使用完畢。\n\n💎 加購單次解讀 NT$49 即將開放,敬請期待。\n下個月初會自動恢復 1 次免費名額。")]
+                ))
+                return
+
+            # 從問題判斷分類
+            cat = get_category_from_question(q_text) if q_text else '綜合'
+            cat_map = {'感情': 'love', '事業': 'career', '財運': 'wealth', '健康': 'health',
+                       '考試': 'study', '人際': 'general', '抉擇': 'general', '綜合': 'general'}
+            category = cat_map.get(cat, 'general')
+
+            # 建立申請
+            request_id = create_vip_interpretation_request(
+                user_id, hex_code, hex_name, q_text, category, 'free'
+            )
+
+            # 通知客人
+            api.reply_message(ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=f"✅ 申請成功!\n\n您的問事:「{q_text}」\n卦象:{hex_name}\n\n籟柏老師將親自為您解卦,2-5 個工作天內透過 LINE 私訊回覆完整批註。\n\n本月剩餘免費名額:0/1\n下個月 1 日恢復名額。\n\n申請編號:#{request_id}")]
+            ))
+
+            # 通知管理員(如果有設定 ADMIN_USER_ID)
+            if ADMIN_USER_ID:
+                admin_text = (
+                    f"📿 新解讀申請 #{request_id}\n\n"
+                    f"用戶:{user_id[:8]}...\n"
+                    f"卦象:{hex_name}({hex_code})\n"
+                    f"問題:{q_text}\n"
+                    f"分類:{cat}\n\n"
+                    f"指令:\n"
+                    f"管理員:解讀:{request_id}  ← 生成並送出"
+                )
+                push_message_to_user(ADMIN_USER_ID, admin_text)
+
+            return
+
+
             parts = data.split(':')
             if len(parts) >= 3:
                 field = parts[1]
@@ -4056,7 +4528,7 @@ def handle_postback(event):
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.2.1"}
+    return {"status": "healthy", "service": "laibai-taiji-yizhan", "version": "6.2.3"}
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5003)), debug=True)
